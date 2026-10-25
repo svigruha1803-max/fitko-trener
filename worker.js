@@ -11,6 +11,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS chat (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, content TEXT, created TEXT)`,
   `CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT, created TEXT)`,
   `CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, p256dh TEXT, auth TEXT, created TEXT)`,
+  `CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, day TEXT, kind TEXT, model TEXT, input INTEGER, output INTEGER, cache_read INTEGER, cache_write INTEGER)`,
 ];
 let schemaReady = false;
 async function ensureSchema(env) {
@@ -56,7 +57,16 @@ async function latestPlan(env) {
   return r ? { id: r.id, created: r.created, ...JSON.parse(r.data) } : null;
 }
 
-async function callAI(env, system, messages, max_tokens = 3000) {
+// USD per million tokens — Anthropic price list (platform.claude.com/docs/en/about-claude/pricing), checked 2026-10-25
+const PRICES = { 'claude-sonnet-4-6': { input: 3, output: 15, cache_read: 0.30, cache_write: 3.75 } };
+const usdOf = (m, i, o, cr = 0, cw = 0) => { const p = PRICES[m] || PRICES[MODEL]; return (i * p.input + o * p.output + cr * p.cache_read + cw * p.cache_write) / 1e6; };
+async function logUsage(env, kind, model, u) {
+  try {
+    await env.DB.prepare('INSERT INTO usage (ts,day,kind,model,input,output,cache_read,cache_write) VALUES (?,?,?,?,?,?,?,?)')
+      .bind(now(), new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }), kind, model, u.input_tokens || 0, u.output_tokens || 0, u.cache_read_input_tokens || 0, u.cache_creation_input_tokens || 0).run();
+  } catch (e) {}
+}
+async function callAI(env, system, messages, max_tokens = 3000, kind = 'chat') {
   const body = JSON.stringify({ model: MODEL, max_tokens, system, messages });
   const res = await env.AI_SVC.fetch('https://ai-svc/ai', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-App-Key': env.AI_KEY || '' }, body,
@@ -64,6 +74,7 @@ async function callAI(env, system, messages, max_tokens = 3000) {
   const txt = await res.text();
   if (!res.ok) throw new Error('AI ' + res.status + ': ' + txt.slice(0, 300));
   const data = JSON.parse(txt);
+  if (data.usage) await logUsage(env, kind, data.model || MODEL, data.usage);
   return (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
 }
 
@@ -196,7 +207,7 @@ async function handleCheckin(req, env) {
       if (first && prev && first.date !== prev.date) content.push({ type: 'text', text: `První check-in byl ${first.date}: váha ${first.weight ?? '-'} kg, pas ${first.waist ?? '-'} cm.` });
       content.push({ type: 'text', text: `Poznámka: ${note || '-'}\n\nUdělej check-in analýzu: 1) co je vidět (postava, svalové partie, držení těla), 2) ${prev ? 'změny oproti předchozímu check-inu' : 'výchozí stav — první check-in'}, 3) slabé partie a co v plánu posílit/upravit, 4) zhodnocení váhy a pasu. Max ~250 slov, bez Markdown nadpisů. Pokud fotky nejsou srovnatelné (světlo, poloha, vzdálenost), řekni to.` });
       const { ctx } = await buildContext(env);
-      analysis = await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content }], 1500);
+      analysis = await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content }], 1500, 'checkin');
       analysis = analysis.replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
       await env.DB.prepare('UPDATE checkins SET analysis=? WHERE id=?').bind(analysis, id).run();
       await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', `📸 Check-in ${date}\n\n${analysis}`, now()).run();
@@ -311,13 +322,27 @@ Nové rekordy (e1RM, Epley): ${prs.join('; ') || 'žádné'}.
 Váha: ${ck.length ? ck.map(c => `${c.date} ${c.weight} kg${c.waist ? ', pas ' + c.waist + ' cm' : ''}`).join(' | ') : 'bez dat'}.
 Poznámky z tréninků: ${week.map(w => w.note).filter(Boolean).join(' | ') || '-'}.`;
   const { ctx } = await buildContext(env);
-  const text = (await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: `Napiš týdenní souhrn (max ~150 slov, bez Markdown nadpisů): 1) jak dopadl týden vs. cíl, 2) rekordy a pokrok, 3) jedna až dvě konkrétní úpravy na příští týden. Použij jen tato data, nic si nevymýšlej:\n${stats}` }], 900))
+  const text = (await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: `Napiš týdenní souhrn (max ~150 slov, bez Markdown nadpisů): 1) jak dopadl týden vs. cíl, 2) rekordy a pokrok, 3) jedna až dvě konkrétní úpravy na příští týden. Použij jen tato data, nic si nevymýšlej:\n${stats}` }], 900, 'summary'))
     .replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
   await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', `🗓️ Týdenní souhrn (${fromS.slice(5).split('-').reverse().join('.')}–${today.slice(5).split('-').reverse().join('.')})\n\n${text}`, now()).run();
   await setKV(env, 'last_summary', { date: today, text });
   let sent = null;
   if (push) sent = await pushAll(env, { title: `Týdenní souhrn: ${week.length}/${n} tréninků${prs.length ? ', ' + prs.length + '× rekord' : ''}`, body: text.slice(0, 140), tag: 'summary', url: './' });
   return { text, sent, stats };
+}
+
+async function usageReport(env) {
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+  const month = today.slice(0, 7);
+  const since = new Date(today); since.setDate(since.getDate() - 29); const sinceS = since.toISOString().slice(0, 10);
+  const rows = (await env.DB.prepare('SELECT day,kind,model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw,COUNT(*) n FROM usage WHERE day>=? OR day LIKE ? GROUP BY day,kind,model').bind(sinceS, month + '%').all()).results;
+  const agg = f => rows.filter(f).reduce((a, r) => ({ calls: a.calls + r.n, input: a.input + r.i, output: a.output + r.o, usd: a.usd + usdOf(r.model, r.i, r.o, r.cr, r.cw) }), { calls: 0, input: 0, output: 0, usd: 0 });
+  const days = []; for (let i = 0; i < 30; i++) { const d = new Date(sinceS); d.setDate(d.getDate() + i); const k = d.toISOString().slice(0, 10); days.push({ day: k, ...agg(r => r.day === k) }); }
+  const kinds = ['chat', 'checkin', 'swap', 'summary'].map(k => ({ kind: k, ...agg(r => r.day.startsWith(month) && r.kind === k) }));
+  const all = await env.DB.prepare('SELECT SUM(input) i,SUM(output) o,COUNT(*) n,MIN(day) first FROM usage').first();
+  const mt = agg(r => r.day.startsWith(month));
+  const dim = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate(), dom = +today.slice(8, 10);
+  return { prices: PRICES[MODEL], model: MODEL, today: agg(r => r.day === today), month: mt, forecast: mt.usd / dom * dim, days, kinds, total: { calls: all?.n || 0, since: all?.first || null }, budget: await getKV(env, 'budget_usd') };
 }
 
 async function handleSwap(req, env) {
@@ -329,7 +354,7 @@ Důvod: ${reason || 'neuveden'}.
 Ostatní cviky v tomto tréninku: ${(current || []).filter(n => n !== exercise.name).join(', ') || '-'}.
 Navrhni 3 náhrady do plně vybavené posilovny, které cílí na stejné svaly/pohybový vzor, respektují důvod (bolest → šetrnější varianta, obsazený stroj → jiné vybavení) a neduplikují ostatní cviky.
 Odpověz POUZE JSON polem bez dalšího textu: [{"name":"...","sets":3,"reps":"8-10","rest":"2 min","note":"krátký tip k technice","why":"proč je to vhodná náhrada (1 věta)"}]`;
-  const txt = await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: prompt }], 1000);
+  const txt = await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: prompt }], 1000, 'swap');
   const mm = txt.match(/\[[\s\S]*\]/);
   let options = [];
   try { options = JSON.parse(mm ? mm[0] : txt); } catch { return json(req, { error: 'AI vrátila neplatný formát', raw: txt.slice(0, 300) }, 502); }
@@ -360,7 +385,9 @@ export default {
         const workouts = (await env.DB.prepare('SELECT id,date,day_name,data,note FROM workouts ORDER BY date DESC, id DESC LIMIT 60').all()).results
           .map(w => ({ ...w, data: JSON.parse(w.data || '[]') }));
         const chat = (await env.DB.prepare('SELECT id,role,content,created FROM chat ORDER BY id DESC LIMIT 80').all()).results.reverse();
-        return json(req, { profile, plan, checkins, workouts, chat });
+        const mu = await env.DB.prepare('SELECT model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw FROM usage WHERE day LIKE ? GROUP BY model').bind(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }).slice(0, 7) + '%').all();
+        const usage = { monthUsd: mu.results.reduce((a, r) => a + usdOf(r.model, r.i, r.o, r.cr, r.cw), 0), budget: await getKV(env, 'budget_usd') };
+        return json(req, { profile, plan, checkins, workouts, chat, usage });
       }
       if (p === '/profile' && req.method === 'PUT') {
         const body = await req.json();
@@ -389,6 +416,8 @@ export default {
       if (p === '/push/test' && req.method === 'POST') {
         return json(req, { sent: await pushAll(env, { title: 'Bráška tě zdraví 💪', body: 'Upozornění fungují. Teď hurá do posilovny.', tag: 'test', url: './' }) });
       }
+      if (p === '/usage' && req.method === 'GET') return json(req, await usageReport(env));
+      if (p === '/usage/budget' && req.method === 'PUT') { const { usd } = await req.json(); await setKV(env, 'budget_usd', usd ? +usd : null); return json(req, { ok: true }); }
       if (p === '/push/nag' && req.method === 'POST') return json(req, await dailyNag(env, true));
       if (p === '/summary' && req.method === 'POST') { const r = await weeklySummary(env, false); return json(req, { text: r.text }); }
       let m;

@@ -159,6 +159,13 @@ header .who span.mad{color:var(--err)}
 #offline{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:#3a2a10;color:#ffd38a;text-align:center;font-size:12px;padding:3px 8px}
 body.is-offline #offline{display:block}
 body.is-offline header{top:20px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:70px}
+.bars i{flex:1;background:linear-gradient(180deg,var(--acc),var(--acc3));border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+.bars i.z{background:var(--card2);opacity:1}
+.kind{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid var(--line)}
+.bbar{height:10px;border-radius:6px;background:var(--card2);overflow:hidden}
+.bbar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--ok),var(--acc))}
+.bbar.over i{background:linear-gradient(90deg,var(--acc),var(--err))}
 /* rest timer */
 #timer{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom));z-index:30;display:none;align-items:center;gap:10px;background:rgba(22,26,34,.96);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:18px;padding:8px 8px 8px 14px;box-shadow:0 10px 30px rgba(0,0,0,.5);overflow:hidden;min-width:280px;animation:pop .25s ease}
 #timer .tm-bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:rgba(255,255,255,.06)}
@@ -301,6 +308,16 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
       <p class="mut">Trenér si to doplňuje i sám z chatu.</p>
       <div id="profFields"></div>
       <div style="margin-top:10px"><button id="pSave" style="width:100%">Uložit profil</button></div>
+    </div>
+    <div class="card" id="usageCard">
+      <h2>Čerpání AI</h2>
+      <div class="prs" id="usTiles"></div>
+      <div id="usBudgetBar" style="margin-top:10px"></div>
+      <div id="usChart" style="margin-top:10px"></div>
+      <div id="usKinds" style="margin-top:6px"></div>
+      <label>Měsíční rozpočet (USD)</label>
+      <div class="row"><input id="usBudget" type="number" step="0.5" min="0" inputmode="decimal" placeholder="např. 5"><button class="sec" id="usSave" style="flex:0 0 auto">Uložit</button></div>
+      <p class="mut" style="margin-top:8px" id="usNote"></p>
     </div>
     <div class="card" id="notifCard">
       <h2>Bráška tě hlídá</h2>
@@ -516,7 +533,7 @@ async function load() {
   $('#login').style.display = 'none'; $('#app').style.display = 'block';
   renderAll();
 }
-function renderAll() { renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD === 'idle' || MOOD === 'sad' || MOOD === 'angry' ? baseMood() : MOOD); }
+function renderAll() { budgetCheck(); renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD === 'idle' || MOOD === 'sad' || MOOD === 'angry' ? baseMood() : MOOD); }
 function hdr() {
   const c = S.checkins[0];
   const ws = weekStreak();
@@ -526,6 +543,7 @@ function hdr() {
 /* ---------- nav ---------- */
 $$('nav div').forEach(n => n.onclick = () => go(n.dataset.v));
 function go(v) {
+  if (v === 'prof' && PW && navigator.onLine) renderUsage();
   $$('nav div').forEach(n => n.dataset.active = n.dataset.v === v ? '1' : '0');
   $$('.view').forEach(s => s.dataset.active = s.id === 'v-' + v ? '1' : '0');
     document.body.dataset.view = v;
@@ -926,6 +944,29 @@ $('#sumNow').onclick = async () => {
   catch (e) { toast('Chyba: ' + e.message, 4000, 'think'); setMood(baseMood()); }
   $('#sumNow').disabled = false; $('#sumNow').textContent = 'Souhrn týdne teď';
 };
+
+/* ---------- AI usage ---------- */
+const usd = v => '$' + (v < 1 ? v.toFixed(3) : v.toFixed(2));
+const KIND = { chat: 'Chat s trenérem', checkin: 'Analýza fotek', swap: 'Výměna cviku', summary: 'Týdenní souhrny' };
+async function renderUsage() {
+  let u; try { u = await api('/usage'); } catch (e) { $('#usNote').textContent = 'Čerpání se nepodařilo načíst.'; return; }
+  const m = u.month, b = u.budget;
+  $('#usTiles').innerHTML = `<div><b>${usd(m.usd)}</b><span>tento měsíc</span></div><div><b>${usd(u.forecast || 0)}</b><span>odhad za měsíc</span></div><div><b>${usd(u.today.usd)}</b><span>dnes · ${u.today.calls}× AI</span></div>`;
+  if (b) { const pct = Math.min(100, 100 * m.usd / b); $('#usBudgetBar').innerHTML = `<div class="row" style="justify-content:space-between;font-size:13px;margin-bottom:4px"><span class="mut">Rozpočet ${usd(b)}</span><b style="flex:0 0 auto">${Math.round(100 * m.usd / b)} %</b></div><div class="bbar ${m.usd >= b * .8 ? 'over' : ''}"><i style="width:${pct}%"></i></div>`; }
+  else $('#usBudgetBar').innerHTML = '';
+  const mx = Math.max(...u.days.map(d => d.usd), 0.0001);
+  $('#usChart').innerHTML = `<div class="mut" style="margin-bottom:4px">Posledních 30 dní</div><div class="bars">${u.days.map(d => `<i class="${d.usd ? '' : 'z'}" style="height:${d.usd ? Math.max(4, 100 * d.usd / mx) : 2}%" title="${d.day}: ${usd(d.usd)} · ${d.calls}× · ${d.input.toLocaleString('cs-CZ')} in / ${d.output.toLocaleString('cs-CZ')} out tokenů"></i>`).join('')}</div>`;
+  $('#usKinds').innerHTML = u.kinds.filter(k => k.calls).map(k => `<div class="kind"><span>${KIND[k.kind] || k.kind} <span class="mut">${k.calls}×</span></span><b>${usd(k.usd)}</b></div>`).join('') || '<p class="mut">Tento měsíc zatím žádné volání AI.</p>';
+  $('#usBudget').value = b || '';
+  $('#usNote').innerHTML = `Model ${esc(u.model)}: $${u.prices.input} / mil. vstupních a $${u.prices.output} / mil. výstupních tokenů (ceník Anthropic). Měří se jen Fitko; Robůtek čerpá ze stejného klíče zvlášť. Přesnou fakturaci vidíš v Anthropic Console → Usage.`;
+}
+$('#usSave').onclick = async () => { const v = $('#usBudget').value.replace(',', '.'); await api('/usage/budget', { method: 'PUT', body: { usd: v ? +v : null } }); S.usage = { ...(S.usage || {}), budget: v ? +v : null }; toast(v ? `Rozpočet ${usd(+v)} uložen` : 'Rozpočet zrušen', 2500, 'happy'); renderUsage(); };
+let budgetWarned = false;
+function budgetCheck() {
+  const u = S.usage; if (!u || !u.budget || budgetWarned) return;
+  if (u.monthUsd >= u.budget) { budgetWarned = true; setTimeout(() => toast(`AI tento měsíc už stála ${usd(u.monthUsd)}, rozpočet byl ${usd(u.budget)}.`, 6000, 'angry'), 900); }
+  else if (u.monthUsd >= u.budget * .8) { budgetWarned = true; setTimeout(() => toast(`Pozor: máš vyčerpáno ${Math.round(100 * u.monthUsd / u.budget)} % rozpočtu na AI.`, 5000, 'think'), 900); }
+}
 
 /* ---------- check-in ---------- */
 const photoFiles = {};
