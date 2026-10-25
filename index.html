@@ -89,9 +89,13 @@ nav div[data-active="1"]{color:#fff;background:linear-gradient(135deg,rgba(255,1
 @keyframes blink{0%,94%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
 .mascot.bounce{animation:bounce 2.6s ease-in-out infinite}
 @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-.mascot .arm-l{transform-box:fill-box;transform-origin:85% 90%}
-.mascot.bounce .arm-l{animation:curl 2.6s ease-in-out infinite}
-@keyframes curl{0%,100%{transform:rotate(0)}50%{transform:rotate(-14deg)}}
+.mascot .arm{transform-box:view-box}
+.mascot.bounce .arm{animation:pump 1.4s ease-in-out infinite}
+@keyframes pump{0%,100%{transform:rotate(0)}50%{transform:rotate(var(--r))}}
+.mascot.bounce .arm.point{animation:poke .45s ease-in-out infinite}
+@keyframes poke{0%,100%{transform:rotate(0)}50%{transform:rotate(-7deg) translate(2px,-2px)}}
+.mascot .spark{animation:glow .7s ease-in-out infinite alternate}
+.mascot.angry .vein{animation:glow .5s ease-in-out infinite alternate}
 .mascot.talk .mouth-o{animation:talk .35s infinite alternate}
 .mascot .mouth-o{transform-box:fill-box;transform-origin:center}
 @keyframes talk{from{transform:scaleY(.35)}to{transform:scaleY(1)}}
@@ -126,11 +130,26 @@ th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;lett
 .analysis{white-space:pre-wrap;font-size:14px;background:var(--card2);border-radius:12px;padding:10px;margin-top:6px}
 #v-plan,#v-log,#v-check,#v-prof{max-width:760px;margin:0 auto}
 #toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--card);border:1px solid var(--line);padding:6px 14px 6px 6px;border-radius:16px;z-index:20;display:none;font-size:14px;align-items:center;gap:8px;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:pop .25s ease}
-#toast .av{width:34px;height:34px}
+#toast .av{width:34px;height:34px;flex:0 0 34px}
+#toast{max-width:calc(100% - 24px)}
 #login{max-width:380px;margin:10vh auto 0;padding:16px;text-align:center}
 #login .card{text-align:left}
 #login svg{width:170px;height:195px}
 svg text{fill:var(--mut);font-size:10px}
+header .who span.mad{color:var(--err)}
+.streak{display:inline-block;background:linear-gradient(135deg,rgba(255,122,26,.25),rgba(255,77,109,.2));border:1px solid rgba(255,122,26,.4);color:#fff;border-radius:999px;padding:2px 8px;font-weight:700;font-size:12px}
+.nag{display:flex;gap:10px;align-items:center;border-radius:16px;padding:10px 12px;margin-bottom:6px;animation:pop .3s ease}
+.nag .av{width:48px;height:48px;flex:0 0 48px}
+.nag.sad{background:rgba(127,211,255,.08);border:1px solid rgba(127,211,255,.3)}
+.nag.angry{background:rgba(255,77,109,.10);border:1px solid rgba(255,77,109,.45);animation:pop .3s ease,shake .5s ease .3s 2}
+.nag button{flex:0 0 auto}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.mascot.angry .steam{animation:steam 1.2s ease-in-out infinite}
+@keyframes steam{0%,100%{opacity:.4;transform:translateY(0)}50%{opacity:.95;transform:translateY(-3px)}}
+.mascot.sad .drop{animation:drop 2s ease-in infinite}
+@keyframes drop{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(14px);opacity:0}}
+.mascot.angry.bounce{animation:stomp .6s ease-in-out infinite}
+@keyframes stomp{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px) rotate(-1deg)}}
 /* rest timer */
 #timer{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom));z-index:30;display:none;align-items:center;gap:10px;background:rgba(22,26,34,.96);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:18px;padding:8px 8px 8px 14px;box-shadow:0 10px 30px rgba(0,0,0,.5);overflow:hidden;min-width:280px;animation:pop .25s ease}
 #timer .tm-bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:rgba(255,255,255,.06)}
@@ -292,84 +311,92 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
 </div>
 
 <script>
-/* Trenér Fitko — original SVG mascot. mood: idle | talk | happy | think | flex */
+/* Trenér Fitko "Bráška" — original comedic bodybuilder coach (SVG).
+   mood: idle | talk | happy | think | sad | angry ; opt.head → head-only avatar */
 let _mid = 0;
 function mascot(mood = 'idle', opt = {}) {
   const u = 'm' + (++_mid);
   const head = !!opt.head;
-  const vb = head ? '38 2 124 118' : '0 0 200 232';
-  const eyes = {
-    happy: `<path d="M74 78 q8 -10 16 0" stroke="url(#${u}eye)" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M110 78 q8 -10 16 0" stroke="url(#${u}eye)" stroke-width="6" fill="none" stroke-linecap="round"/>`,
-    think: `<g class="eye"><rect x="75" y="68" width="13" height="16" rx="6.5" fill="url(#${u}eye)"/><circle cx="84" cy="72" r="2.6" fill="#fff"/></g><g class="eye"><rect x="112" y="72" width="13" height="10" rx="5" fill="url(#${u}eye)"/><circle cx="121" cy="75" r="2.2" fill="#fff"/></g>`,
-  }[mood] || `<g class="eye"><rect x="75" y="66" width="13" height="19" rx="6.5" fill="url(#${u}eye)"/><circle cx="84.5" cy="71" r="2.8" fill="#fff"/></g><g class="eye"><rect x="112" y="66" width="13" height="19" rx="6.5" fill="url(#${u}eye)"/><circle cx="121.5" cy="71" r="2.8" fill="#fff"/></g>`;
-  const mouth = {
-    talk: `<ellipse class="mouth-o" cx="100" cy="92" rx="7" ry="5.5" fill="#ff8fa3"/>`,
-    happy: `<path d="M88 88 q12 14 24 0 z" fill="#ff8fa3" stroke="#ffd0d8" stroke-width="1.5" stroke-linejoin="round"/>`,
-    think: `<path d="M93 92 h10 q4 0 6 -3" stroke="#ff8fa3" stroke-width="3.5" fill="none" stroke-linecap="round"/>`,
-  }[mood] || `<path d="M90 89 q10 9 20 0" stroke="#ff8fa3" stroke-width="3.5" fill="none" stroke-linecap="round"/>`;
+  const vb = head ? '72 6 56 58' : '0 0 200 232';
+  const SK = `url(#${u}sk)`, SKD = `url(#${u}skd)`, INK = '#24170f';
+  /* ---------- face ---------- */
+  const L = 93.5, R = 106.5, EY = 40;
+  const eye = (x, dx = 0, dy = 0) => `<g class="eye"><ellipse cx="${x}" cy="${EY}" rx="3.4" ry="3.8" fill="#fff"/><circle cx="${x + dx}" cy="${EY + .4 + dy}" r="2.2" fill="${INK}"/><circle cx="${x + dx + .9}" cy="${EY - .6 + dy}" r=".8" fill="#fff"/></g>`;
+  const F = {
+    idle: { b: `<path d="M89 34.5 q4.5 -2 9 0 M102 34.5 q4.5 -2 9 0"/>`, e: eye(L) + eye(R), m: `<path d="M95 49 q5 4 10 0" stroke="#6e2626" stroke-width="2" fill="none" stroke-linecap="round"/>` },
+    talk: { b: `<path d="M89 34 q4.5 -2.5 9 0 M102 34 q4.5 -2.5 9 0"/>`, e: eye(L) + eye(R), m: `<ellipse class="mouth-o" cx="100" cy="49.5" rx="4" ry="3.2" fill="#6e2626"/><path d="M97 48 h6" stroke="#fff" stroke-width="1.3"/>` },
+    happy: { b: `<path d="M89 33.5 q4.5 -3 9 0 M102 33.5 q4.5 -3 9 0"/>`, e: `<path d="M90.5 41 q3 -4 6 0 M103.5 41 q3 -4 6 0" stroke="${INK}" stroke-width="2" fill="none" stroke-linecap="round"/>`, m: `<path d="M93.5 47 q6.5 9 13 0z" fill="#6e2626"/><path d="M94.5 47.3 q5.5 2.2 11 0 v1.3 q-5.5 1.8 -11 0z" fill="#fff"/>` },
+    think: { b: `<path d="M89 35 q4.5 -2 9 0 M102 32.5 q4.5 -2 9 1.5"/>`, e: eye(L, 1.3, -1) + eye(R, 1.3, -1), m: `<path d="M96 50 q4 -1.6 9 .6" stroke="#6e2626" stroke-width="2" fill="none" stroke-linecap="round"/>` },
+    sad: { b: `<path d="M89.5 36 l8 -2.5 M110.5 36 l-8 -2.5"/>`, e: eye(L, 0, 1) + eye(R, 0, 1), m: `<path d="M95 51.5 q5 -4.5 10 0" stroke="#6e2626" stroke-width="2" fill="none" stroke-linecap="round"/>` },
+    angry: { b: `<path d="M88.5 33 l9 3.4 M111.5 33 l-9 3.4" stroke-width="2.6"/>`, e: eye(L, -.3, .5) + eye(R, .3, .5) + `<path d="M89 35.6 l9 2.6 v-4 h-9z M111 35.6 l-9 2.6 v-4 h9z" fill="${SK}"/>`, m: `<path d="M94 51.5 q6 -5 12 0 v1.2 h-12z" fill="#6e2626"/><path d="M95.5 51 h9" stroke="#fff" stroke-width="1.4"/>` },
+  }[mood];
+  const fc = F || { b: '', e: eye(L) + eye(R), m: '' };
+  const blush = mood === 'angry'
+    ? `<ellipse cx="90" cy="45" rx="3.5" ry="2" fill="#ff3b3b" opacity=".55"/><ellipse cx="110" cy="45" rx="3.5" ry="2" fill="#ff3b3b" opacity=".55"/><path class="vein" d="M105 29 l2.5 2.5 m0 -2.5 l-2.5 2.5" stroke="#ff3b3b" stroke-width="1.6" stroke-linecap="round"/>`
+    : `<ellipse cx="90" cy="45" rx="3" ry="1.8" fill="#ff8a7a" opacity=".3"/><ellipse cx="110" cy="45" rx="3" ry="1.8" fill="#ff8a7a" opacity=".3"/>`;
   const defs = `<defs>
-    <linearGradient id="${u}skin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb05c"/><stop offset=".55" stop-color="#ff7a1a"/><stop offset="1" stop-color="#e2531c"/></linearGradient>
-    <linearGradient id="${u}skin2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc07a"/><stop offset="1" stop-color="#ff7d22"/></linearGradient>
-    <linearGradient id="${u}visor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2e3445"/><stop offset="1" stop-color="#11141b"/></linearGradient>
-    <linearGradient id="${u}eye" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8fbff"/><stop offset="1" stop-color="#38d6f5"/></linearGradient>
-    <linearGradient id="${u}band" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff3d5e"/><stop offset="1" stop-color="#d81e45"/></linearGradient>
-    <linearGradient id="${u}metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef2f7"/><stop offset=".5" stop-color="#a9b3c1"/><stop offset="1" stop-color="#6b7584"/></linearGradient>
-    <linearGradient id="${u}plate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a5163"/><stop offset="1" stop-color="#1e2230"/></linearGradient>
-    <linearGradient id="${u}shorts" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34406a"/><stop offset="1" stop-color="#232c4d"/></linearGradient>
-    <radialGradient id="${u}glow"><stop offset="0" stop-color="#b8fbff"/><stop offset=".45" stop-color="#38d6f5"/><stop offset="1" stop-color="#38d6f5" stop-opacity="0"/></radialGradient>
-    <filter id="${u}sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".35"/></filter>
+    <linearGradient id="${u}sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9a07a"/><stop offset="1" stop-color="#bf8158"/></linearGradient>
+    <linearGradient id="${u}skd" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d59a70"/><stop offset=".55" stop-color="#b9774c"/><stop offset="1" stop-color="#93582f"/></linearGradient>
+    <radialGradient id="${u}mus" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#e8b48c"/><stop offset=".6" stop-color="#c88a5f"/><stop offset="1" stop-color="#a5683d"/></radialGradient>
+    <linearGradient id="${u}tank" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2d36"/><stop offset="1" stop-color="#121419"/></linearGradient>
+    <linearGradient id="${u}or" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffa04d"/><stop offset=".6" stop-color="#ff7a1a"/><stop offset="1" stop-color="#e2531c"/></linearGradient>
+    <linearGradient id="${u}sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a4058"/><stop offset="1" stop-color="#232838"/></linearGradient>
+    <linearGradient id="${u}lens" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2a3a"/><stop offset=".5" stop-color="#0e151d"/><stop offset="1" stop-color="#2d4a63"/></linearGradient>
+    <filter id="${u}ds" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".32"/></filter>
   </defs>`;
-  const headSvg = `
-    <g filter="url(#${u}sh)">
-      <line x1="100" y1="28" x2="100" y2="12" stroke="#5b6475" stroke-width="4" stroke-linecap="round"/>
-      <circle class="ant" cx="100" cy="10" r="11" fill="url(#${u}glow)"/>
-      <circle cx="100" cy="10" r="5" fill="#dffdff"/>
-      <circle cx="47" cy="72" r="8" fill="url(#${u}metal)"/><circle cx="153" cy="72" r="8" fill="url(#${u}metal)"/>
-      <rect x="50" y="26" width="100" height="90" rx="38" fill="url(#${u}skin2)"/>
-      <path d="M62 44 q10 -14 30 -15" stroke="#fff" stroke-opacity=".45" stroke-width="5" fill="none" stroke-linecap="round"/>
-      <path d="M52 44 q48 -14 96 0 v11 q-48 -13 -96 0 z" fill="url(#${u}band)"/>
-      <path d="M53 50 q47 -12 94 0" stroke="#fff" stroke-width="2" fill="none" opacity=".85"/>
-      <path d="M146 47 q14 2 20 12 q-10 -2 -16 1 z" fill="#d81e45"/><path d="M146 50 q10 10 9 22 q-6 -8 -12 -10 z" fill="#ff3d5e"/>
-      <rect x="62" y="56" width="76" height="50" rx="22" fill="url(#${u}visor)"/>
-      <path d="M70 62 q20 -4 44 -2" stroke="#fff" stroke-opacity=".12" stroke-width="4" fill="none" stroke-linecap="round"/>
-      ${eyes}
-      <ellipse cx="72" cy="94" rx="6" ry="3.5" fill="#ff6b8a" opacity=".45"/><ellipse cx="128" cy="94" rx="6" ry="3.5" fill="#ff6b8a" opacity=".45"/>
-      ${mouth}
+  const headSvg = `<g filter="url(#${u}ds)">
+      <ellipse cx="84" cy="41" rx="3" ry="4.5" fill="${SK}"/><ellipse cx="116" cy="41" rx="3" ry="4.5" fill="${SK}"/>
+      <path d="M85 33 q0 -19 15 -19 q15 0 15 19 v9 q0 15 -15 17 q-15 -2 -15 -17z" fill="${SK}"/>
+      <path d="M85.5 43 q1.5 13 14.5 15 q13 -2 14.5 -15 q-3 9 -14.5 10 q-11.5 -1 -14.5 -10z" fill="#3a2a20" opacity=".22"/>
+      <path d="M84.5 30 q0 -17 15.5 -17 q15.5 0 15.5 17 q-1 -5 -3 -7 q-12 -3 -25 0 q-2 2 -3 7z" fill="#1c130d"/>
+      <path d="M90 15.5 q10 -3 20 0" stroke="#3b2a1f" stroke-width="1.5" fill="none" opacity=".8"/>
+      <g class="shades"><rect x="86.5" y="21" width="12" height="6.5" rx="3" fill="url(#${u}lens)"/><rect x="101.5" y="21" width="12" height="6.5" rx="3" fill="url(#${u}lens)"/><path d="M98.5 23.5 h3" stroke="#0e151d" stroke-width="1.6"/><path d="M88.5 22.6 l4 0 M103.5 22.6 l4 0" stroke="#7fd3ff" stroke-width="1" opacity=".8"/></g>
+      <g stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round">${fc.b}</g>
+      ${fc.e}
+      <path d="M100 40.5 q-2 5 0 6.3 q1.5 .6 3 0" stroke="#9c6440" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+      ${blush}${fc.m}
     </g>`;
-  if (head) return `<svg class="mascot ${opt.cls || ''} ${mood}" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${defs}${headSvg}</svg>`;
-  const thinkBubble = mood === 'think' ? `<circle cx="160" cy="34" r="4" fill="#fff" opacity=".7"/><circle cx="170" cy="22" r="6" fill="#fff" opacity=".8"/><ellipse cx="184" cy="8" rx="12" ry="8" fill="#fff" opacity=".9"/>` : '';
-  const sparkle = mood === 'happy' ? `<g fill="#ffd166"><path d="M24 40 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z"/><path d="M178 92 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z"/></g>` : '';
-  return `<svg class="mascot ${opt.cls || ''} ${mood}" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${defs}
-    <ellipse cx="100" cy="224" rx="50" ry="6" fill="#000" opacity=".35"/>
-    ${sparkle}${thinkBubble}
-    <g filter="url(#${u}sh)">
-      <!-- legs -->
-      <rect x="76" y="178" width="18" height="34" rx="9" fill="#5b6475"/><rect x="106" y="178" width="18" height="34" rx="9" fill="#5b6475"/>
-      <path d="M70 214 q0 -9 14 -9 h10 q4 0 4 5 v6 q0 3 -3 3 h-22 q-3 0 -3 -5z" fill="#f4f6fa"/><path d="M68 216 h30" stroke="#ff3d5e" stroke-width="3" stroke-linecap="round"/>
-      <path d="M102 214 q0 -5 4 -5 h10 q14 0 14 9 q0 5 -3 5 h-22 q-3 0 -3 -3z" fill="#f4f6fa"/><path d="M102 216 h30" stroke="#ff3d5e" stroke-width="3" stroke-linecap="round"/>
-      <!-- right arm (down) -->
-      <path d="M138 128 q20 8 18 40" stroke="url(#${u}skin)" stroke-width="17" fill="none" stroke-linecap="round"/>
-      <circle cx="156" cy="172" r="10" fill="#ffb05c"/>
-      <!-- torso -->
-      <rect x="58" y="112" width="84" height="74" rx="30" fill="url(#${u}skin)"/>
-      <path d="M58 160 h84 v8 q0 22 -30 22 h-24 q-30 0 -30 -22z" fill="url(#${u}shorts)"/>
-      <path d="M60 162 h80" stroke="#ff7a1a" stroke-width="3"/>
-      <ellipse cx="74" cy="128" rx="8" ry="12" fill="#fff" opacity=".22"/>
-      <circle cx="100" cy="138" r="14" fill="#fff" opacity=".95"/>
-      <path d="M103 128 l-8 12 h6 l-3 9 9 -13 h-6z" fill="#ff5a2a"/>
-      <!-- whistle -->
-      <path d="M86 114 l12 16 M114 114 l-12 16" stroke="#e8edf3" stroke-width="1.6" fill="none"/>
-      <!-- left arm (flex + dumbbell) -->
-      <g class="arm-l">
-        <path d="M62 130 q-24 2 -26 -24" stroke="url(#${u}skin)" stroke-width="17" fill="none" stroke-linecap="round"/>
-        <circle cx="36" cy="102" r="10" fill="#ffb05c"/>
-        <rect x="14" y="98" width="44" height="7" rx="3.5" fill="url(#${u}metal)"/>
-        <rect x="10" y="88" width="10" height="27" rx="4" fill="url(#${u}plate)"/><rect x="52" y="88" width="10" height="27" rx="4" fill="url(#${u}plate)"/>
-        <rect x="5" y="92" width="6" height="19" rx="3" fill="url(#${u}plate)"/><rect x="61" y="92" width="6" height="19" rx="3" fill="url(#${u}plate)"/>
-      </g>
-      <rect x="88" y="106" width="24" height="10" rx="5" fill="#5b6475"/>
+  const steam = mood === 'angry' ? `<g class="steam" fill="#cfd6e0" opacity=".9"><circle cx="80" cy="16" r="4.5"/><circle cx="74" cy="9" r="3.2"/><circle cx="120" cy="16" r="4.5"/><circle cx="126" cy="9" r="3.2"/></g>` : '';
+  const drop = mood === 'sad' ? `<path class="drop" d="M114 32 q3 5 0 7.5 q-3 -2.5 0 -7.5z" fill="#7fd3ff"/>` : '';
+  if (head) return `<svg class="mascot ${opt.cls || ''} ${mood}" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${defs}${headSvg}${drop}</svg>`;
+
+  /* ---------- arms by mood ---------- */
+  const fist = (x, y, r = 9) => `<circle cx="${x}" cy="${y}" r="${r}" fill="url(#${u}mus)"/><path d="M${x - r * .55} ${y - r * .2} h${r * 1.1} M${x - r * .55} ${y + r * .2} h${r * 1.1}" stroke="#8a522c" stroke-width="1" opacity=".5"/>`;
+  const limb = (d, w = 20) => `<path d="${d}" stroke="${SKD}" stroke-width="${w}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const bicep = (x, y, rx = 12, ry = 10, rot = 0) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="url(#${u}mus)" transform="rotate(${rot} ${x} ${y})"/><ellipse cx="${x - 3}" cy="${y - 3}" rx="${rx * .35}" ry="${ry * .25}" fill="#fff" opacity=".22" transform="rotate(${rot} ${x} ${y})"/>`;
+  const dblL = `<g class="arm" style="--r:-5deg;transform-origin:56px 88px">${limb('M56 88 Q30 90 26 96')}${limb('M26 96 Q22 76 30 60', 17)}${bicep(40, 84, 13, 10, -10)}${fist(30, 56, 10)}</g>`;
+  const dblR = `<g class="arm" style="--r:5deg;transform-origin:144px 88px">${limb('M144 88 Q170 90 174 96')}${limb('M174 96 Q178 76 170 60', 17)}${bicep(160, 84, 13, 10, 10)}${fist(170, 56, 10)}</g>`;
+  const hipL = `<g class="arm" style="--r:-3deg;transform-origin:56px 90px">${limb('M56 90 Q34 104 38 124')}${limb('M38 124 Q48 138 66 140', 16)}${bicep(44, 102, 10, 12, 30)}${fist(68, 140, 8)}</g>`;
+  const hangL = `<g>${limb('M56 92 Q44 116 46 138')}${limb('M46 138 Q46 152 50 160', 16)}${fist(50, 162, 8.5)}</g>`;
+  const hangR = `<g>${limb('M144 92 Q156 116 154 138')}${limb('M154 138 Q154 152 150 160', 16)}${fist(150, 162, 8.5)}</g>`;
+  const pointR = (cls) => `<g class="${cls}" style="--r:-4deg;transform-origin:144px 90px">${limb('M144 90 Q164 84 176 74')}${limb('M176 74 Q182 68 186 62', 15)}${bicep(158, 84, 11, 9, -20)}<circle cx="187" cy="60" r="7.5" fill="url(#${u}mus)"/><path d="M190 56 l8 -8" stroke="#c88a5f" stroke-width="5" stroke-linecap="round"/></g>`;
+  const chinR = `<g>${limb('M144 92 Q164 112 150 128')}${limb('M150 128 Q130 112 114 66', 15)}${bicep(156, 106, 10, 12, -30)}<circle cx="112" cy="62" r="7.5" fill="url(#${u}mus)"/></g>`;
+  const arms = { idle: dblL + dblR, talk: hipL + pointR('arm'), happy: dblL + dblR, think: hangL + chinR, sad: hangL + hangR, angry: hipL + pointR('arm point') }[mood] || dblL + dblR;
+  const sparkle = mood === 'happy' ? `<g fill="#ffd166" class="spark"><path d="M14 30 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z"/><path d="M186 34 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5z"/><path d="M100 2 l2 4 4 2 -4 2 -2 4 -2 -4 -4 -2 4 -2z"/></g>` : '';
+  const thinkB = mood === 'think' ? `<circle cx="128" cy="24" r="3" fill="#fff" opacity=".7"/><circle cx="137" cy="14" r="4.5" fill="#fff" opacity=".8"/><ellipse cx="152" cy="6" rx="11" ry="6" fill="#fff" opacity=".9"/>` : '';
+  const slump = mood === 'sad' ? 'transform="translate(0 3)"' : '';
+  return `<svg class="mascot braska ${opt.cls || ''} ${mood}" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${defs}
+    <ellipse cx="100" cy="226" rx="52" ry="6" fill="#000" opacity=".35"/>
+    ${sparkle}${thinkB}
+    <g filter="url(#${u}ds)" ${slump}>
+      <path d="M76 186 q-6 14 -2 26 h18 q4 -14 4 -26z M124 186 q6 14 2 26 h-18 q-4 -14 -4 -26z" fill="${SKD}"/>
+      <path d="M80 194 q4 4 10 2 M120 194 q-4 4 -10 2" stroke="#8a522c" stroke-width="1.2" fill="none" opacity=".5"/>
+      <path d="M68 216 q0 -8 12 -8 h14 v4 q0 6 -4 6 h-22z M106 208 h14 q12 0 12 8 v2 h-22 q-4 0 -4 -6z" fill="#f4f6fa"/>
+      <path d="M68 219 h26 M106 219 h26" stroke="url(#${u}or)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M70 156 h60 l6 34 q-14 5 -30 1 l-6 -12 l-6 12 q-16 4 -30 -1z" fill="url(#${u}sh)"/>
+      <path d="M74 186 l4 -26 M126 186 l-4 -26" stroke="#ff7a1a" stroke-width="2"/>
+      <path d="M58 70 q20 -10 42 -10 q22 0 42 10 q-24 -2 -42 4 q-18 -6 -42 -4z" fill="${SKD}"/>
+      <path d="M52 92 q2 -22 30 -22 q18 4 36 0 q28 0 30 22 q-6 34 -24 64 h-48 q-18 -30 -24 -64z" fill="url(#${u}mus)"/>
+      <path d="M62 104 q14 10 38 6 q24 4 38 -6" stroke="#8a522c" stroke-width="1.5" fill="none" opacity=".45"/>
+      <path d="M82 72 q4 22 0 38 q-4 22 2 46 h32 q6 -24 2 -46 q-4 -16 0 -38 q-8 18 -18 18 q-10 0 -18 -18z" fill="url(#${u}tank)"/>
+      <path d="M100 96 l-5 9 h4 l-2 7 7 -10 h-4 l2 -6z" fill="url(#${u}or)"/>
+      <rect x="70" y="146" width="60" height="14" rx="4" fill="url(#${u}or)"/>
+      <rect x="93" y="145" width="14" height="16" rx="3" fill="#2a2d36"/><rect x="96" y="148" width="8" height="10" rx="1.5" fill="none" stroke="#cfd6e0" stroke-width="1.6"/>
+      <path d="M72 150 h18 M110 150 h18" stroke="#fff" stroke-opacity=".25" stroke-width="1.2"/>
+      <path d="M90 56 h20 l2 10 q-12 6 -24 0z" fill="${SK}"/>
+      ${arms}
     </g>
-    ${headSvg}
+    ${headSvg}${steam}${drop}
   </svg>`;
 }
 
@@ -384,27 +411,54 @@ const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
 function toast(t, ms = 2600, mood = 'happy') { const e = $('#toast'); e.innerHTML = `<div class="av">${mascot(mood, { head: true })}</div><span>${esc(t)}</span>`; e.style.display = 'flex'; clearTimeout(toast.t); toast.t = setTimeout(() => e.style.display = 'none', ms); }
 /* ---------- coach / mascot state ---------- */
-let MOOD = 'idle', moodT;
+let MOOD = 'idle', moodT, nagShown = false;
 const LINES = {
   idle: ['Jdeme makat.', 'Technika první, kila potom.', 'Konzistence > motivace.', 'Dnes trénink, nebo regenerace?', 'Zapiš každou sérii, ať víme, kam jdeme.'],
   talk: ['Moment, přemýšlím…', 'Počítám to…', 'Skládám odpověď…'],
   happy: ['Dobrá práce!', 'Tak se mi to líbí.', 'Další cihla do zdi.'],
   think: ['Hledám náhradu…', 'Analyzuju fotky…'],
+  sad: ['Chybíš mi v posilovně.', 'Dnes by to chtělo trénink, ne?', 'Činky jsou smutné. Já taky.'],
+  angry: ['Myslíš, že se svaly postaví samy?', 'Gauč není cvik.', 'Ozvi se, nebo přidám přítahy navíc.', 'Tvoje činky volaly. Prý jsi nezvedal.'],
 };
+function attendance() {
+  const n = parseInt((String(S.profile?.dni_tydne || '').match(/\d+/) || [])[0]) || 3;
+  const allowed = Math.ceil(7 / n);
+  const last = S.workouts[0];
+  if (!last) return { gap: null, allowed, n, level: 'none' };
+  const gap = Math.max(0, Math.round((new Date(today()) - new Date(last.date)) / 864e5));
+  return { gap, allowed, n, level: gap <= allowed ? 'ok' : gap <= allowed + 2 ? 'sad' : 'angry' };
+}
+function baseMood() { const a = attendance(); return a.level === 'angry' ? 'angry' : a.level === 'sad' ? 'sad' : 'idle'; }
+function weekKey(d) { const x = new Date(d + 'T12:00:00'); const day = (x.getDay() + 6) % 7; x.setDate(x.getDate() - day); return x.toISOString().slice(0, 10); }
+function weekStreak() {
+  const n = attendance().n, cnt = {};
+  S.workouts.forEach(w => { const k = weekKey(w.date); cnt[k] = (cnt[k] || 0) + 1; });
+  let k = weekKey(today()), streak = 0;
+  if ((cnt[k] || 0) >= n) streak++;
+  for (let i = 0; i < 104; i++) { const d = new Date(k + 'T12:00:00'); d.setDate(d.getDate() - 7); k = d.toISOString().slice(0, 10); if ((cnt[k] || 0) >= n) streak++; else break; }
+  return streak;
+}
+function nagLine() {
+  const a = attendance();
+  if (a.level === 'angry') return `${a.gap} ${a.gap >= 5 ? 'dní' : 'dny'} bez tréninku. ` + LINES.angry[Math.floor(Math.random() * LINES.angry.length)];
+  if (a.level === 'sad') return `Poslední trénink před ${a.gap} dny. ` + LINES.sad[Math.floor(Math.random() * LINES.sad.length)];
+  return '';
+}
 function setMood(m, ms) {
   MOOD = m; clearTimeout(moodT);
   const big = $('#coachStage'); if (big) big.innerHTML = mascot(m, { cls: 'bounce' + (m === 'talk' ? ' talk' : '') });
   const av = $('#hdrAv'); if (av) av.innerHTML = mascot(m, { head: true, cls: m === 'talk' ? 'talk' : '' });
-  const ln = LINES[m] || LINES.idle; const cl = $('#coachLine'); if (cl) cl.textContent = ln[Math.floor(Math.random() * ln.length)];
-  const st = $('#hdrStatus'); if (st) { st.textContent = m === 'talk' ? 'píše…' : m === 'think' ? 'přemýšlí…' : 'online · připraven'; st.className = (m === 'talk' || m === 'think') ? 'busy' : ''; }
-  if (ms) moodT = setTimeout(() => setMood('idle'), ms);
+  const ln = LINES[m] || LINES.idle; const cl = $('#coachLine'); if (cl) cl.textContent = (m === 'sad' || m === 'angry') ? nagLine() : ln[Math.floor(Math.random() * ln.length)];
+  const st = $('#hdrStatus'); if (st) { st.textContent = m === 'talk' ? 'píše…' : m === 'think' ? 'přemýšlí…' : m === 'angry' ? 'naštvaný · čeká na tebe' : m === 'sad' ? 'smutný · kde jsi?' : 'online · připraven'; st.className = (m === 'talk' || m === 'think' || m === 'sad') ? 'busy' : m === 'angry' ? 'mad' : ''; }
+  if (ms) moodT = setTimeout(() => setMood(baseMood()), ms);
 }
 function renderCoach() {
   const c = S.checkins.find(x => x.weight != null);
   const w = S.workouts[0];
   const wk = S.workouts.filter(x => (Date.now() - new Date(x.date)) / 864e5 < 7).length;
   const d = s => s ? s.split('-').reverse().join('.') : '–';
-  $('#coachStats').innerHTML = `<div class="stat"><span class="mut">Plán</span><b>${esc(S.plan?.name || 'zatím žádný')}</b></div>
+  const ws = weekStreak();
+  $('#coachStats').innerHTML = `<div class="stat"><span class="mut">Série týdnů</span><b>${ws ? '🔥 ' + ws : '–'}</b></div><div class="stat"><span class="mut">Plán</span><b>${esc(S.plan?.name || 'zatím žádný')}</b></div>
     <div class="stat"><span class="mut">Poslední trénink</span><b>${w ? d(w.date) : '–'}</b></div>
     <div class="stat"><span class="mut">Tréninků za 7 dní</span><b>${wk}</b></div>
     <div class="stat"><span class="mut">Váha</span><b>${c ? c.weight + ' kg' : '–'}</b></div>
@@ -438,10 +492,11 @@ async function load() {
   $('#login').style.display = 'none'; $('#app').style.display = 'block';
   renderAll();
 }
-function renderAll() { renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD); }
+function renderAll() { renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD === 'idle' || MOOD === 'sad' || MOOD === 'angry' ? baseMood() : MOOD); }
 function hdr() {
   const c = S.checkins[0];
-  $('#hdrInfo').textContent = c ? `${c.weight ?? '–'} kg · check-in ${c.date.slice(5).split('-').reverse().join('.')}` : '';
+  const ws = weekStreak();
+  $('#hdrInfo').innerHTML = (ws ? `<span class="streak">🔥 ${ws}</span> ` : '') + (c ? `${c.weight ?? '–'} kg` : '');
 }
 
 /* ---------- nav ---------- */
@@ -465,6 +520,11 @@ function renderChat() {
       ? `<div class="mrow user"><div class="msg user">${fmt(m.content)}<span class="t">${tm(m.created)}</span></div></div>`
       : `<div class="mrow"><div class="av">${av}</div><div class="msg assistant">${fmt(m.content)}<span class="t">${tm(m.created)}</span></div></div>`).join('');
   }
+  const a = attendance();
+  if (a.level === 'sad' || a.level === 'angry') {
+    log.insertAdjacentHTML('afterbegin', `<div class="nag ${a.level}"><div class="av">${mascot(a.level, { head: true })}</div><div style="flex:1"><b>${a.level === 'angry' ? 'Hej! Kde jsi?' : 'Chybíš mi…'}</b><div>${esc(nagLine())}</div></div><button id="nagGo">Jdu cvičit</button></div>`);
+    $('#nagGo').onclick = () => go('log');
+  }
   const q = ['Navrhni mi plán', 'Jak mám dnes trénovat?', 'Zhodnoť poslední týden', 'Uprav plán podle check-inu'];
   $('#quick').innerHTML = q.map(t => `<span class="pill">${t}</span>`).join('');
   $$('#quick .pill').forEach(p => p.onclick = () => { $('#chatIn').value = p.textContent; sendChat(); });
@@ -480,7 +540,7 @@ async function sendChat() {
   try {
     const r = await api('/chat', { method: 'POST', body: { message: t } });
     S.chat.push({ role: 'assistant', content: r.reply, created: new Date().toISOString() });
-    setMood('idle'); if (r.planSaved) { setMood('happy', 4000); toast('Plán uložen – mrkni do záložky Plán'); const st = await api('/state'); S.plan = st.plan; S.profile = st.profile; renderPlan(); renderLog(); renderProfile(); }
+    setMood(baseMood()); if (r.planSaved) { setMood('happy', 4000); toast('Plán uložen – mrkni do záložky Plán'); const st = await api('/state'); S.plan = st.plan; S.profile = st.profile; renderPlan(); renderLog(); renderProfile(); }
     else { const st = await api('/state'); S.profile = st.profile; renderProfile(); }
   } catch (e) { setMood('think', 3000); S.chat.push({ role: 'assistant', content: 'Něco se pokazilo: ' + e.message }); }
   $('#typing').style.display = 'none'; $('#chatSend').disabled = false; renderChat();
@@ -516,7 +576,7 @@ async function findSwap(i) {
   const planEx = S.plan?.days?.[idx]?.exercises?.find(x => x.name === e.name) || {};
   try {
     const r = await api('/swap', { method: 'POST', body: { exercise: { name: e.name, sets: planEx.sets || e.sets.length, reps: planEx.reps || '' }, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', reason, current: W.map(x => x.name) } });
-    SW[i] = { state: 'pick', options: r.options, reason }; setMood('idle');
+    SW[i] = { state: 'pick', options: r.options, reason }; setMood(baseMood());
   } catch (err) { SW[i] = { state: 'error', error: err.message, reason }; setMood('think', 3000); }
   rerender();
 }
