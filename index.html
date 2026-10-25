@@ -330,6 +330,21 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
       <div id="profFields"></div>
       <div style="margin-top:10px"><button id="pSave" style="width:100%">Uložit profil</button></div>
     </div>
+    <div class="card" id="memCard">
+      <h2>Co si o tobě Bráška pamatuje</h2>
+      <p class="mut">Dlouhodobá paměť: cíle, dohody, cviky, které nechceš, omezení. Bráška si ji sám doplňuje každých 6 zpráv a můžeš ji upravit.</p>
+      <textarea id="memText" rows="6" style="margin-top:8px" placeholder="Zatím prázdné – naplní se během chatování."></textarea>
+      <div class="row" style="margin-top:8px"><button class="sec" id="memSave">Uložit</button><button class="sec" id="memRefresh">Aktualizovat z chatu</button></div>
+      <p class="mut" id="memRoute" style="margin-top:6px;font-size:12px"></p>
+    </div>
+    <div class="card" id="backupCard">
+      <h2>Záloha dat</h2>
+      <p class="mut">Každou neděli se záloha uloží sama do cloudu (posledních 8). Kdykoli si ji můžeš stáhnout i k sobě.</p>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="sec" id="bkJson">Stáhnout zálohu (JSON)</button><button class="sec" id="bkCsv">Tréninky do Excelu</button></div>
+      <div class="row" style="margin-top:8px"><button class="sec" id="bkNow">Zálohovat teď do cloudu</button></div>
+      <div id="bkList" style="margin-top:8px"></div>
+      <p class="mut" style="font-size:12px;margin-top:6px">Fotky v záloze nejsou (jen odkazy na ně) – zůstávají uložené v appce.</p>
+    </div>
     <div class="card" id="kbCard">
       <h2>Odborné zdroje</h2>
       <p class="mut">Bráška smí odborná doporučení stavět jen na těchto ověřených zdrojích a u každého tvrzení ukáže, odkud je. Klepni na modrý štítek v chatu.</p>
@@ -460,6 +475,46 @@ function mascot(mood = 'idle', opt = {}) {
   </svg>`;
 }
 
+/* ---------- Katalog cviků: sjednocení názvů (CZ/EN, s diakritikou i bez) ---------- */
+const EX_CATALOG = {
+  'Bench press': ['bench', 'benchpress', 'bench press', 'tlak na lavici', 'tlak na rovne lavici', 'tlak s velkou cinkou na lavici', 'barbell bench press', 'flat bench'],
+  'Šikmý bench press': ['incline bench', 'incline bench press', 'sikmy bench', 'sikmy benchpress', 'tlak na sikme lavici', 'tlak na sikme lavici s velkou cinkou'],
+  'Tlak s jednoručkami na lavici': ['db bench', 'dumbbell bench press', 'db bench press', 'tlak s jednoruckami', 'tlak s jednoruckami na rovne lavici', 'jednorucky na lavici'],
+  'Šikmý tlak s jednoručkami': ['incline db press', 'incline dumbbell press', 'sikmy tlak s jednoruckami', 'tlak s jednoruckami na sikme lavici'],
+  'Dřep': ['squat', 'back squat', 'drep', 'drep s velkou cinkou', 'zadni drep', 'barbell squat'],
+  'Přední dřep': ['front squat', 'predni drep'],
+  'Mrtvý tah': ['deadlift', 'mrtvy tah', 'conventional deadlift', 'klasicky mrtvy tah'],
+  'Rumunský mrtvý tah': ['rdl', 'romanian deadlift', 'rumunsky mrtvy tah', 'mrtvy tah s propnutyma nohama', 'stiff leg deadlift'],
+  'Tlak nad hlavu': ['ohp', 'overhead press', 'military press', 'tlak nad hlavu', 'tlak s velkou cinkou nad hlavu', 'standing press', 'vojensky tlak'],
+  'Tlak s jednoručkami nad hlavu': ['db shoulder press', 'dumbbell shoulder press', 'seated db press', 'tlak s jednoruckami nad hlavu', 'tlak jednorucek vsedе'],
+  'Shyby': ['pull up', 'pullup', 'pull-up', 'shyby', 'shyby nadhmatem', 'chin up', 'chinup', 'shyby podhmatem'],
+  'Přítahy v předklonu': ['barbell row', 'bent over row', 'pritahy v predklonu', 'pritahy velke cinky v predklonu', 'veslovani v predklonu', 'pendlay row'],
+  'Přítahy jednoručky': ['db row', 'dumbbell row', 'one arm row', 'pritahy jednorucky', 'pritah jednorucky v predklonu', 'veslovani jednoruckou'],
+  'Stahování horní kladky': ['lat pulldown', 'pulldown', 'stahovani horni kladky', 'stahovani kladky', 'stahovani kladky k hrudniku'],
+  'Přítahy kladky vsedě': ['seated cable row', 'cable row', 'pritahy kladky vsede', 'veslovani na kladce', 'seated row'],
+  'Leg press': ['leg press', 'legpress', 'nozni lis', 'leg-press'],
+  'Hip thrust': ['hip thrust', 'hipthrust', 'mostik s cinkou', 'hip-thrust'],
+  'Výpady': ['lunges', 'lunge', 'vypady', 'vypady s jednoruckami', 'walking lunges', 'chuzove vypady'],
+  'Bulharský dřep': ['bulgarian split squat', 'bulharsky drep', 'split squat', 'bss'],
+  'Zakopávání': ['leg curl', 'hamstring curl', 'zakopavani', 'zakopavani na stroji', 'lying leg curl', 'seated leg curl'],
+  'Předkopávání': ['leg extension', 'predkopavani', 'predkopavani na stroji', 'extenze kolen'],
+  'Výpony': ['calf raise', 'calf raises', 'vypony', 'vypony na lytka', 'vypony ve stoje', 'standing calf raise'],
+  'Kliky na bradlech': ['dips', 'dip', 'kliky na bradlech', 'bradla'],
+  'Bicepsový zdvih': ['biceps curl', 'bicep curl', 'curl', 'bicepsovy zdvih', 'zdvihy na biceps', 'barbell curl', 'db curl', 'dumbbell curl'],
+  'Kladivové zdvihy': ['hammer curl', 'hammer curls', 'kladivove zdvihy', 'kladiva'],
+  'Stahování kladky na triceps': ['triceps pushdown', 'tricep pushdown', 'pushdown', 'stahovani kladky na triceps', 'tricepsove stahovani', 'rope pushdown'],
+  'Francouzský tlak': ['skull crusher', 'skullcrusher', 'french press', 'francouzsky tlak', 'lying triceps extension'],
+  'Upažování': ['lateral raise', 'lateral raises', 'side raise', 'upazovani', 'upazovani s jednoruckami', 'upazovani na kladce'],
+  'Face pull': ['face pull', 'facepull', 'face pulls', 'pritahy lana k obliceji'],
+  'Rozpažování': ['fly', 'flyes', 'chest fly', 'pec deck', 'rozpazovani', 'rozpazovani na stroji', 'cable fly', 'butterfly'],
+  'Plank': ['plank', 'prkno', 'planking'],
+  'Zvedání nohou ve visu': ['hanging leg raise', 'leg raise', 'zvedani nohou ve visu', 'zvedani nohou'],
+};
+const exStrip = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const EX_INDEX = (() => { const m = {}; for (const [canon, al] of Object.entries(EX_CATALOG)) { m[exStrip(canon)] = canon; m[exStrip(canon).replace(/ /g, '')] = canon; for (const a of al) { m[exStrip(a)] = canon; m[exStrip(a).replace(/ /g, '')] = canon; } } return m; })();
+function canonEx(name) { const k = exStrip(name); return EX_INDEX[k] || EX_INDEX[k.replace(/ /g, '')] || String(name || '').trim(); }
+const exKey = name => exStrip(canonEx(name)).replace(/ /g, '');
+
 const WORKER_URL = 'https://fitko-trener.svigruha1803.workers.dev';
 let PW = '';
 try { PW = localStorage.getItem('fitko_pw') || ''; } catch (e) {}
@@ -571,7 +626,7 @@ function hdr() {
 /* ---------- nav ---------- */
 $$('nav div').forEach(n => n.onclick = () => go(n.dataset.v));
 function go(v) {
-  if (v === 'prof' && PW && navigator.onLine) renderUsage();
+  if (v === 'prof' && PW && navigator.onLine) { renderUsage(); renderMemBackup(); }
   $$('nav div').forEach(n => n.dataset.active = n.dataset.v === v ? '1' : '0');
   $$('.view').forEach(s => s.dataset.active = s.id === 'v-' + v ? '1' : '0');
     document.body.dataset.view = v;
@@ -643,7 +698,7 @@ async function findSwap(i) {
   const e = W[i]; const reason = $('#swr' + i)?.value || SW[i]?.reason || '';
   SW[i] = { state: 'loading', reason }; rerender(); setMood('think');
   const idx = $('#wDay').value;
-  const planEx = S.plan?.days?.[idx]?.exercises?.find(x => x.name === e.name) || {};
+  const planEx = S.plan?.days?.[idx]?.exercises?.find(x => exKey(x.name) === exKey(e.name)) || {};
   try {
     const r = await api('/swap', { method: 'POST', body: { exercise: { name: e.name, sets: planEx.sets || e.sets.length, reps: planEx.reps || '' }, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', reason, current: W.map(x => x.name) } });
     SW[i] = { state: 'pick', options: r.options, reason }; setMood(baseMood());
@@ -658,7 +713,7 @@ async function applySwap(i, k, permanent) {
     const idx = $('#wDay').value;
     if (idx !== '' && S.plan) {
       const plan = JSON.parse(JSON.stringify(S.plan));
-      const ex = plan.days[idx].exercises.find(x => x.name === old);
+      const ex = plan.days[idx].exercises.find(x => exKey(x.name) === exKey(old));
       if (ex) Object.assign(ex, { name: o.name, sets: o.sets, reps: o.reps, rest: o.rest || ex.rest, note: o.note || '' });
       const { id, created, ...clean } = plan;
       try { await api('/plan', { method: 'PUT', body: clean }); S.plan = { ...clean, id, created: new Date().toISOString() }; renderPlan(); } catch (e) { toast('Plán se neuložil: ' + e.message); }
@@ -679,7 +734,7 @@ function bindSwap(root) {
 function fmtSets(sets) { const v = (sets || []).filter(s => s.reps || +s.kg).map(s => s.reps ? `${+s.kg || 0}×${s.reps}` : `${s.kg} kg`); return v.length ? v.join(', ') : 'odcvičeno, bez zápisu'; }
 function lastDay(dayName) { return S.workouts.find(w => w.day_name === dayName); }
 function lastSets(name) {
-  for (const w of S.workouts) { const e = (w.data || []).find(x => x.name.toLowerCase() === name.toLowerCase()); if (e) return e.sets.filter(s => s.reps); }
+  for (const w of S.workouts) { const e = (w.data || []).find(x => exKey(x.name) === exKey(name)); if (e) return e.sets.filter(s => s.reps); }
   return [];
 }
 function loadDay() {
@@ -725,10 +780,10 @@ function renderLog() {
   renderProgress();
 }
 $('#wDay').onchange = loadDay;
-$('#wAddEx').onclick = () => { const n = $('#wNewEx').value.trim(); if (!n) return; W.push({ name: n, sets: [{ kg: '', reps: '' }, { kg: '', reps: '' }, { kg: '', reps: '' }] }); $('#wNewEx').value = ''; renderEx(); };
+$('#wAddEx').onclick = () => { const n = $('#wNewEx').value.trim(); if (!n) return; W.push({ name: canonEx(n), sets: [{ kg: '', reps: '' }, { kg: '', reps: '' }, { kg: '', reps: '' }] }); $('#wNewEx').value = ''; renderEx(); };
 $('#wSave').onclick = () => saveWorkout();
 async function saveWorkout() {
-  const ex = W.map(e => ({ name: e.name, sets: e.sets.filter(s => s.done || s.kg !== '' || s.reps !== '').map(s => ({ kg: s.kg === '' ? 0 : +s.kg, reps: s.reps === '' ? null : +s.reps })) }));
+  const ex = W.map(e => ({ name: canonEx(e.name), sets: e.sets.filter(s => s.done || s.kg !== '' || s.reps !== '').map(s => ({ kg: s.kg === '' ? 0 : +s.kg, reps: s.reps === '' ? null : +s.reps })) }));
   if (!ex.length && !$('#wNote').value.trim()) return toast('Není co uložit – přidej cvik nebo poznámku.', 3000, 'think');
   const idx = $('#wDay').value;
   const body = { date: $('#wDate').value, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', exercises: ex, note: $('#wNote').value };
@@ -803,14 +858,14 @@ function suggest(e) {
 }
 function bestBefore(name) {
   let best = { e: 0, kg: 0 };
-  for (const w of S.workouts) for (const ex of (w.data || [])) if (ex.name.toLowerCase() === name.toLowerCase())
+  for (const w of S.workouts) for (const ex of (w.data || [])) if (exKey(ex.name) === exKey(name))
     for (const st of ex.sets) { if (!st.reps) continue; best.e = Math.max(best.e, e1rm(st.kg, st.reps)); best.kg = Math.max(best.kg, +st.kg || 0); }
   return best;
 }
 function findPRs(ex) {
   const out = [];
   for (const e of ex) {
-    const had = S.workouts.some(w => (w.data || []).some(x => x.name.toLowerCase() === e.name.toLowerCase()));
+    const had = S.workouts.some(w => (w.data || []).some(x => exKey(x.name) === exKey(e.name)));
     if (!had) continue;
     const b = bestBefore(e.name);
     const top = e.sets.filter(s => s.reps).reduce((a, s) => e1rm(s.kg, s.reps) > e1rm(a.kg, a.reps) ? s : a, { kg: 0, reps: 0 });
@@ -829,7 +884,7 @@ function confetti() {
   }
 }
 function renderProgress() {
-  const names = [...new Set(S.workouts.flatMap(w => (w.data || []).map(e => e.name)))];
+  const names = [...new Set(S.workouts.flatMap(w => (w.data || []).map(e => canonEx(e.name))))];
   if (!names.length) { $('#prCard').style.display = 'none'; return; }
   $('#prCard').style.display = 'block';
   const cur = $('#prEx').value;
@@ -839,7 +894,7 @@ function renderProgress() {
 }
 function drawProgress() {
   const name = $('#prEx').value;
-  const pts = S.workouts.slice().reverse().map(w => { const e0 = (w.data || []).find(x => x.name === name); const e = e0 && { ...e0, sets: e0.sets.filter(s => s.reps) }; if (!e || !e.sets.length) return null;
+  const pts = S.workouts.slice().reverse().map(w => { const e0 = (w.data || []).find(x => exKey(x.name) === exKey(name)); const e = e0 && { ...e0, sets: e0.sets.filter(s => s.reps) }; if (!e || !e.sets.length) return null;
     const best = e.sets.reduce((a, s) => e1rm(s.kg, s.reps) > e1rm(a.kg, a.reps) ? s : a);
     return { date: w.date, e: e1rm(best.kg, best.reps), kg: Math.max(...e.sets.map(s => +s.kg || 0)), best, vol: e.sets.reduce((a, s) => a + (+s.kg || 0) * (+s.reps || 0), 0) }; }).filter(Boolean);
   if (!pts.length) { $('#prChart').innerHTML = ''; $('#prStats').innerHTML = ''; return; }
@@ -993,9 +1048,29 @@ function openCite(k) {
   $('#citeSheet').style.display = 'flex';
 }
 
+/* ---------- memory + backups ---------- */
+function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+async function renderMemBackup() {
+  try { const m = await api('/memory'); $('#memText').value = m.memory || ''; $('#memRoute').textContent = m.route === 'own-key' ? 'AI běží přes vlastní klíč Fitka.' : 'AI zatím běží přes Robůtkův klíč (vlastní klíč můžeš doplnit v Cloudflare).'; } catch (e) {}
+  try { const b = await api('/backups'); $('#bkList').innerHTML = b.backups.length ? `<div class="mut" style="margin-bottom:4px">Zálohy v cloudu:</div>` + b.backups.map(k => `<div class="kind"><span>${esc(k.replace('backup/', '').replace('.json', '').split('-').reverse().join('.'))}</span><button class="ghost" data-bk="${esc(k.replace('backup/', ''))}">stáhnout</button></div>`).join('') : '<p class="mut">Zatím žádná záloha v cloudu.</p>';
+    $$('[data-bk]').forEach(x => x.onclick = async () => { const r = await api('/backup/' + encodeURIComponent(x.dataset.bk)); download('fitko-zaloha-' + x.dataset.bk, JSON.stringify(r, null, 2), 'application/json'); }); } catch (e) {}
+}
+$('#memSave').onclick = async () => { await api('/memory', { method: 'PUT', body: { memory: $('#memText').value } }); toast('Paměť uložena', 2500, 'happy'); };
+$('#memRefresh').onclick = async () => { $('#memRefresh').disabled = true; $('#memRefresh').textContent = 'Bráška vzpomíná…'; setMood('think'); try { const r = await api('/memory/refresh', { method: 'POST' }); $('#memText').value = r.memory || ''; toast('Paměť aktualizována', 2500, 'happy'); setMood('happy', 2500); } catch (e) { toast('Chyba: ' + e.message, 3500, 'think'); setMood(baseMood()); } $('#memRefresh').disabled = false; $('#memRefresh').textContent = 'Aktualizovat z chatu'; };
+$('#bkJson').onclick = async () => { try { const d = await api('/export'); download(`fitko-zaloha-${today()}.json`, JSON.stringify(d, null, 2), 'application/json'); } catch (e) { toast('Chyba: ' + e.message, 3000, 'think'); } };
+$('#bkCsv').onclick = async () => {
+  try {
+    const d = await api('/export'); const q = v => { v = String(v ?? ''); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const rows = [['Datum', 'Den plánu', 'Cvik', 'Série', 'Kg', 'Opakování', 'e1RM (Epley)', 'Poznámka']];
+    for (const w of d.workouts) { if (!(w.data || []).length) rows.push([w.date, w.day_name, '', '', '', '', '', w.note]); for (const e of (w.data || [])) { if (!e.sets.length) rows.push([w.date, w.day_name, canonEx(e.name), '', '', '', '', w.note]); e.sets.forEach((st, i) => rows.push([w.date, w.day_name, canonEx(e.name), i + 1, String(st.kg ?? '').replace('.', ','), st.reps ?? '', st.reps ? (e1rm(st.kg, st.reps)).toFixed(1).replace('.', ',') : '', i === 0 ? w.note : ''])); } }
+    download(`fitko-treninky-${today()}.csv`, '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+  } catch (e) { toast('Chyba: ' + e.message, 3000, 'think'); }
+};
+$('#bkNow').onclick = async () => { try { await api('/backup/now', { method: 'POST' }); toast('Záloha uložena do cloudu', 2500, 'happy'); renderMemBackup(); } catch (e) { toast('Chyba: ' + e.message, 3000, 'think'); } };
+
 /* ---------- AI usage ---------- */
 const usd = v => '$' + (v < 1 ? v.toFixed(3) : v.toFixed(2));
-const KIND = { chat: 'Chat s trenérem', checkin: 'Analýza fotek', swap: 'Výměna cviku', summary: 'Týdenní souhrny' };
+const KIND = { chat: 'Chat s trenérem', checkin: 'Analýza fotek', swap: 'Výměna cviku', summary: 'Týdenní souhrny', memory: 'Aktualizace paměti' };
 async function renderUsage() {
   let u; try { u = await api('/usage'); } catch (e) { $('#usNote').textContent = 'Čerpání se nepodařilo načíst.'; return; }
   const m = u.month, b = u.budget;

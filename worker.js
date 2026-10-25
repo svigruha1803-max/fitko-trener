@@ -3,6 +3,46 @@
 // Secrets: APP_PASSWORD, AI_KEY (sent to plavecky /ai), VAPID_PRIVATE (JWK); vars: VAPID_PUBLIC
 // Cron: daily 17:00 UTC → attendance nag push; Sunday 18:00 UTC → weekly summary
 const MODEL = 'claude-sonnet-4-6';
+/* ---------- Katalog cviků: sjednocení názvů (CZ/EN, s diakritikou i bez) ---------- */
+const EX_CATALOG = {
+  'Bench press': ['bench', 'benchpress', 'bench press', 'tlak na lavici', 'tlak na rovne lavici', 'tlak s velkou cinkou na lavici', 'barbell bench press', 'flat bench'],
+  'Šikmý bench press': ['incline bench', 'incline bench press', 'sikmy bench', 'sikmy benchpress', 'tlak na sikme lavici', 'tlak na sikme lavici s velkou cinkou'],
+  'Tlak s jednoručkami na lavici': ['db bench', 'dumbbell bench press', 'db bench press', 'tlak s jednoruckami', 'tlak s jednoruckami na rovne lavici', 'jednorucky na lavici'],
+  'Šikmý tlak s jednoručkami': ['incline db press', 'incline dumbbell press', 'sikmy tlak s jednoruckami', 'tlak s jednoruckami na sikme lavici'],
+  'Dřep': ['squat', 'back squat', 'drep', 'drep s velkou cinkou', 'zadni drep', 'barbell squat'],
+  'Přední dřep': ['front squat', 'predni drep'],
+  'Mrtvý tah': ['deadlift', 'mrtvy tah', 'conventional deadlift', 'klasicky mrtvy tah'],
+  'Rumunský mrtvý tah': ['rdl', 'romanian deadlift', 'rumunsky mrtvy tah', 'mrtvy tah s propnutyma nohama', 'stiff leg deadlift'],
+  'Tlak nad hlavu': ['ohp', 'overhead press', 'military press', 'tlak nad hlavu', 'tlak s velkou cinkou nad hlavu', 'standing press', 'vojensky tlak'],
+  'Tlak s jednoručkami nad hlavu': ['db shoulder press', 'dumbbell shoulder press', 'seated db press', 'tlak s jednoruckami nad hlavu', 'tlak jednorucek vsedе'],
+  'Shyby': ['pull up', 'pullup', 'pull-up', 'shyby', 'shyby nadhmatem', 'chin up', 'chinup', 'shyby podhmatem'],
+  'Přítahy v předklonu': ['barbell row', 'bent over row', 'pritahy v predklonu', 'pritahy velke cinky v predklonu', 'veslovani v predklonu', 'pendlay row'],
+  'Přítahy jednoručky': ['db row', 'dumbbell row', 'one arm row', 'pritahy jednorucky', 'pritah jednorucky v predklonu', 'veslovani jednoruckou'],
+  'Stahování horní kladky': ['lat pulldown', 'pulldown', 'stahovani horni kladky', 'stahovani kladky', 'stahovani kladky k hrudniku'],
+  'Přítahy kladky vsedě': ['seated cable row', 'cable row', 'pritahy kladky vsede', 'veslovani na kladce', 'seated row'],
+  'Leg press': ['leg press', 'legpress', 'nozni lis', 'leg-press'],
+  'Hip thrust': ['hip thrust', 'hipthrust', 'mostik s cinkou', 'hip-thrust'],
+  'Výpady': ['lunges', 'lunge', 'vypady', 'vypady s jednoruckami', 'walking lunges', 'chuzove vypady'],
+  'Bulharský dřep': ['bulgarian split squat', 'bulharsky drep', 'split squat', 'bss'],
+  'Zakopávání': ['leg curl', 'hamstring curl', 'zakopavani', 'zakopavani na stroji', 'lying leg curl', 'seated leg curl'],
+  'Předkopávání': ['leg extension', 'predkopavani', 'predkopavani na stroji', 'extenze kolen'],
+  'Výpony': ['calf raise', 'calf raises', 'vypony', 'vypony na lytka', 'vypony ve stoje', 'standing calf raise'],
+  'Kliky na bradlech': ['dips', 'dip', 'kliky na bradlech', 'bradla'],
+  'Bicepsový zdvih': ['biceps curl', 'bicep curl', 'curl', 'bicepsovy zdvih', 'zdvihy na biceps', 'barbell curl', 'db curl', 'dumbbell curl'],
+  'Kladivové zdvihy': ['hammer curl', 'hammer curls', 'kladivove zdvihy', 'kladiva'],
+  'Stahování kladky na triceps': ['triceps pushdown', 'tricep pushdown', 'pushdown', 'stahovani kladky na triceps', 'tricepsove stahovani', 'rope pushdown'],
+  'Francouzský tlak': ['skull crusher', 'skullcrusher', 'french press', 'francouzsky tlak', 'lying triceps extension'],
+  'Upažování': ['lateral raise', 'lateral raises', 'side raise', 'upazovani', 'upazovani s jednoruckami', 'upazovani na kladce'],
+  'Face pull': ['face pull', 'facepull', 'face pulls', 'pritahy lana k obliceji'],
+  'Rozpažování': ['fly', 'flyes', 'chest fly', 'pec deck', 'rozpazovani', 'rozpazovani na stroji', 'cable fly', 'butterfly'],
+  'Plank': ['plank', 'prkno', 'planking'],
+  'Zvedání nohou ve visu': ['hanging leg raise', 'leg raise', 'zvedani nohou ve visu', 'zvedani nohou'],
+};
+const exStrip = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const EX_INDEX = (() => { const m = {}; for (const [canon, al] of Object.entries(EX_CATALOG)) { m[exStrip(canon)] = canon; m[exStrip(canon).replace(/ /g, '')] = canon; for (const a of al) { m[exStrip(a)] = canon; m[exStrip(a).replace(/ /g, '')] = canon; } } return m; })();
+function canonEx(name) { const k = exStrip(name); return EX_INDEX[k] || EX_INDEX[k.replace(/ /g, '')] || String(name || '').trim(); }
+const exKey = name => exStrip(canonEx(name)).replace(/ /g, '');
+
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT, updated TEXT)`,
@@ -68,9 +108,10 @@ async function logUsage(env, kind, model, u) {
 }
 async function callAI(env, system, messages, max_tokens = 3000, kind = 'chat') {
   const body = JSON.stringify({ model: MODEL, max_tokens, system, messages });
-  const res = await env.AI_SVC.fetch('https://ai-svc/ai', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-App-Key': env.AI_KEY || '' }, body,
-  });
+  // vlastní klíč Fitka (secret ANTHROPIC_API_KEY) má přednost; jinak přes Robůtkův Worker
+  const res = env.ANTHROPIC_API_KEY
+    ? await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body })
+    : await env.AI_SVC.fetch('https://ai-svc/ai', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-App-Key': env.AI_KEY || '' }, body });
   const txt = await res.text();
   if (!res.ok) throw new Error('AI ' + res.status + ': ' + txt.slice(0, 300));
   const data = JSON.parse(txt);
@@ -139,14 +180,16 @@ Nejsi lékař: při bolesti, zranění nebo zdravotním problému doporuč odbor
 const PLAN_FORMAT = `Když se domluvíte na novém nebo upraveném plánu, přidej na konec odpovědi PŘESNĚ jeden blok:
 <plan>{"name":"...","goal":"...","days":[{"name":"A – Push","focus":"...","exercises":[{"name":"Bench press","sets":4,"reps":"6-8","rest":"2-3 min","note":"RIR 1-2"}]}],"progression":"pravidlo progrese","evidence":["K2","K3","K11"]}</plan>
 Do "evidence" dej ID tvrzení ze znalostní báze, na kterých plán stojí.
-Bez bloku <plan>, pokud plán neměníš. Když se dozvíš trvalé info o uživateli (cíl, výška, věk, zkušenosti, zranění, počet dní v týdnu, délka tréninku), přidej blok <profile>{"klic":"hodnota"}</profile> jen se změněnými položkami. Bloky se uživateli nezobrazují.`;
+Názvy cviků piš česky a vždy stejně (pokud cvik už je v plánu nebo historii, použij přesně ten název) – appka podle názvu páruje historii a rekordy. Bez bloku <plan>, pokud plán neměníš. Když se dozvíš trvalé info o uživateli (cíl, výška, věk, zkušenosti, zranění, počet dní v týdnu, délka tréninku), přidej blok <profile>{"klic":"hodnota"}</profile> jen se změněnými položkami. Bloky se uživateli nezobrazují.`;
 
 async function buildContext(env) {
   const profile = await getKV(env, 'profile', {});
   const plan = await latestPlan(env);
   const checkins = (await env.DB.prepare('SELECT date,weight,waist,note,analysis FROM checkins ORDER BY date DESC, id DESC LIMIT 4').all()).results;
   const workouts = (await env.DB.prepare('SELECT date,day_name,data,note FROM workouts ORDER BY date DESC, id DESC LIMIT 12').all()).results;
+  const memory = await getKV(env, 'memory', '');
   let ctx = `\n\n=== PROFIL ===\n${JSON.stringify(profile)}`;
+  if (memory) ctx += `\n\n=== DLOUHODOBÁ PAMĚŤ (co víš o uživateli z dřívějších rozhovorů) ===\n${memory}`;
   ctx += `\n\n=== AKTUÁLNÍ PLÁN ===\n${plan ? JSON.stringify({ name: plan.name, goal: plan.goal, days: plan.days, progression: plan.progression }) : 'zatím žádný'}`;
   ctx += `\n\n=== CHECK-INY (nejnovější první) ===\n` + (checkins.length ? checkins.map(c => `${c.date}: váha ${c.weight ?? '-'} kg, pas ${c.waist ?? '-'} cm${c.note ? ', pozn: ' + c.note : ''}${c.analysis ? '\nAnalýza: ' + c.analysis.slice(0, 1200) : ''}`).join('\n\n') : 'žádné');
   ctx += `\n\n=== POSLEDNÍ TRÉNINKY ===\n` + (workouts.length ? workouts.map(w => `${w.date} ${w.day_name || ''}: ${compactWorkout(w.data)}${w.note ? ' | ' + w.note : ''}`).join('\n') : 'žádné');
@@ -168,6 +211,7 @@ async function extractBlocks(env, text) {
     try {
       const plan = JSON.parse(pm[1].trim());
       if (Array.isArray(plan.days)) {
+        plan.days.forEach(d => (d.exercises || []).forEach(e => { e.name = canonEx(e.name); }));
         await env.DB.prepare('INSERT INTO plans (data,created) VALUES (?,?)').bind(JSON.stringify(plan), now()).run();
         planSaved = plan.name || true;
       }
@@ -205,6 +249,8 @@ async function handleChat(req, env) {
   const reply = await callAI(env, TRAINER_BASE + '\n\n' + PLAN_FORMAT + onboarding + ctx, msgs);
   const { clean, planSaved } = await extractBlocks(env, reply);
   await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', clean, now()).run();
+  const cnt = await env.DB.prepare("SELECT COUNT(*) n FROM chat WHERE role='user'").first();
+  if (cnt && cnt.n % 6 === 0) { try { await updateMemory(env); } catch (e) {} }
   return json(req, { reply: clean, planSaved });
 }
 
@@ -339,15 +385,16 @@ async function weeklySummary(env, push = true) {
   const all = (await env.DB.prepare('SELECT date,day_name,data,note FROM workouts ORDER BY date ASC').all()).results.map(w => ({ ...w, data: JSON.parse(w.data || '[]') }));
   const week = all.filter(w => w.date >= fromS), before = all.filter(w => w.date < fromS);
   const bestBefore = {};
-  for (const w of before) for (const e of w.data) for (const s of e.sets) if (s.reps) bestBefore[e.name] = Math.max(bestBefore[e.name] || 0, e1rm(s.kg, s.reps));
+  for (const w of before) for (const e of w.data) for (const s of e.sets) if (s.reps) bestBefore[exKey(e.name)] = Math.max(bestBefore[exKey(e.name)] || 0, e1rm(s.kg, s.reps));
   const prs = [], perEx = {};
   let vol = 0, sets = 0;
   for (const w of week) for (const e of w.data) for (const s of e.sets) {
     vol += (+s.kg || 0) * (+s.reps || 0); sets++;
     const v = e1rm(s.kg, s.reps);
-    if (s.reps && bestBefore[e.name] && v > bestBefore[e.name] + .01 && (!perEx[e.name] || v > perEx[e.name].v)) perEx[e.name] = { v, kg: s.kg, reps: s.reps };
+    const ek = exKey(e.name);
+    if (s.reps && bestBefore[ek] && v > bestBefore[ek] + .01 && (!perEx[ek] || v > perEx[ek].v)) perEx[ek] = { v, kg: s.kg, reps: s.reps, name: canonEx(e.name) };
   }
-  for (const [name, x] of Object.entries(perEx)) prs.push(`${name} ${x.kg}×${x.reps} (e1RM ${x.v.toFixed(1)} kg)`);
+  for (const [, x] of Object.entries(perEx)) prs.push(`${x.name} ${x.kg}×${x.reps} (e1RM ${x.v.toFixed(1)} kg)`);
   const ck = (await env.DB.prepare('SELECT date,weight,waist FROM checkins WHERE weight IS NOT NULL ORDER BY date DESC LIMIT 2').all()).results;
   const profile = await getKV(env, 'profile', {});
   const n = parseInt((String(profile.dni_tydne || '').match(/\d+/) || [])[0]) || 3;
@@ -366,6 +413,37 @@ Poznámky z tréninků: ${week.map(w => w.note).filter(Boolean).join(' | ') || '
   return { text, sent, stats };
 }
 
+async function updateMemory(env) {
+  const old = await getKV(env, 'memory', '');
+  const hist = (await env.DB.prepare('SELECT role,content FROM chat ORDER BY id DESC LIMIT 16').all()).results.reverse();
+  const convo = hist.map(m => (m.role === 'user' ? 'Uživatel: ' : 'Trenér: ') + m.content.slice(0, 800)).join('\n');
+  const prompt = `Aktualizuj dlouhodobou paměť trenéra o uživateli. Současná paměť:\n${old || '(prázdná)'}\n\nNová konverzace:\n${convo}\n\nVrať POUZE aktualizovaný seznam odrážek (max 15, každá max ~20 slov) s trvalými fakty: cíle, dohody o plánu, preference a cviky, které nechce, omezení/zranění (jen co uživatel řekl), rozvrh a vybavení, důležité milníky. Nic si nedomýšlej, zastaralé informace přepiš, nepiš dočasné věci. Bez úvodu a závěru.`;
+  const txt = (await callAI(env, 'Jsi pečlivý zapisovatel. Píšeš česky, stručně, jen fakta z konverzace.', [{ role: 'user', content: prompt }], 700, 'memory')).trim();
+  if (txt) await setKV(env, 'memory', txt.slice(0, 3000));
+  return txt;
+}
+async function exportAll(env) {
+  const q = async sql => (await env.DB.prepare(sql).all()).results;
+  return {
+    app: 'fitko-robutek', exported: now(), version: 1,
+    profile: await getKV(env, 'profile', {}), memory: await getKV(env, 'memory', ''),
+    plans: (await q('SELECT id,data,created FROM plans ORDER BY id')).map(r => ({ ...r, data: JSON.parse(r.data) })),
+    workouts: (await q('SELECT id,date,day_name,data,note,created FROM workouts ORDER BY date,id')).map(r => ({ ...r, data: JSON.parse(r.data || '[]') })),
+    checkins: (await q('SELECT id,date,weight,waist,note,photos,analysis,created FROM checkins ORDER BY date,id')).map(r => ({ ...r, photos: JSON.parse(r.photos || '{}') })),
+    chat: await q('SELECT role,content,created FROM chat ORDER BY id'),
+    usage: await q('SELECT day,kind,model,SUM(input) input,SUM(output) output,COUNT(*) calls FROM usage GROUP BY day,kind,model ORDER BY day'),
+  };
+}
+async function autoBackup(env) {
+  const data = await exportAll(env);
+  const key = 'backup/' + new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }) + '.json';
+  await env.PHOTOS.put(key, JSON.stringify(data), { metadata: { ct: 'application/json' } });
+  const list = await env.PHOTOS.list({ prefix: 'backup/' });
+  const keys = list.keys.map(k => k.name).sort();
+  for (const k of keys.slice(0, Math.max(0, keys.length - 8))) await env.PHOTOS.delete(k);
+  return key;
+}
+
 async function usageReport(env) {
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
   const month = today.slice(0, 7);
@@ -373,7 +451,7 @@ async function usageReport(env) {
   const rows = (await env.DB.prepare('SELECT day,kind,model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw,COUNT(*) n FROM usage WHERE day>=? OR day LIKE ? GROUP BY day,kind,model').bind(sinceS, month + '%').all()).results;
   const agg = f => rows.filter(f).reduce((a, r) => ({ calls: a.calls + r.n, input: a.input + r.i, output: a.output + r.o, usd: a.usd + usdOf(r.model, r.i, r.o, r.cr, r.cw) }), { calls: 0, input: 0, output: 0, usd: 0 });
   const days = []; for (let i = 0; i < 30; i++) { const d = new Date(sinceS); d.setDate(d.getDate() + i); const k = d.toISOString().slice(0, 10); days.push({ day: k, ...agg(r => r.day === k) }); }
-  const kinds = ['chat', 'checkin', 'swap', 'summary'].map(k => ({ kind: k, ...agg(r => r.day.startsWith(month) && r.kind === k) }));
+  const kinds = ['chat', 'checkin', 'swap', 'summary', 'memory'].map(k => ({ kind: k, ...agg(r => r.day.startsWith(month) && r.kind === k) }));
   const all = await env.DB.prepare('SELECT SUM(input) i,SUM(output) o,COUNT(*) n,MIN(day) first FROM usage').first();
   const mt = agg(r => r.day.startsWith(month));
   const dim = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate(), dom = +today.slice(8, 10);
@@ -400,7 +478,7 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
       await ensureSchema(env);
-      if (/SUN|\* 1$|\* 7$/.test(event.cron) && !/\* \* \* \*$/.test(event.cron)) await weeklySummary(env, true);
+      if (/SUN|\* 1$|\* 7$/.test(event.cron) && !/\* \* \* \*$/.test(event.cron)) { await weeklySummary(env, true); await autoBackup(env); }
       else await dailyNag(env);
     })());
   },
@@ -451,6 +529,13 @@ export default {
       if (p === '/push/test' && req.method === 'POST') {
         return json(req, { sent: await pushAll(env, { title: 'Bráška tě zdraví 💪', body: 'Upozornění fungují. Teď hurá do posilovny.', tag: 'test', url: './' }) });
       }
+      if (p === '/export' && req.method === 'GET') return json(req, await exportAll(env));
+      if (p === '/backups' && req.method === 'GET') { const l = await env.PHOTOS.list({ prefix: 'backup/' }); return json(req, { backups: l.keys.map(k => k.name).sort().reverse() }); }
+      if (p === '/backup/now' && req.method === 'POST') return json(req, { key: await autoBackup(env) });
+      if (p.startsWith('/backup/') && req.method === 'GET') { const { value } = await env.PHOTOS.getWithMetadata('backup/' + decodeURIComponent(p.slice(8)), 'text'); return value ? new Response(value, { headers: { 'Content-Type': 'application/json', ...cors(req) } }) : json(req, { error: 'not found' }, 404); }
+      if (p === '/memory' && req.method === 'GET') return json(req, { memory: await getKV(env, 'memory', ''), route: env.ANTHROPIC_API_KEY ? 'own-key' : 'robutek' });
+      if (p === '/memory' && req.method === 'PUT') { const { memory } = await req.json(); await setKV(env, 'memory', String(memory || '').slice(0, 3000)); return json(req, { ok: true }); }
+      if (p === '/memory/refresh' && req.method === 'POST') return json(req, { memory: await updateMemory(env) });
       if (p === '/kb' && req.method === 'GET') return json(req, { sources: KB_SOURCES, items: KB });
       if (p === '/usage' && req.method === 'GET') return json(req, await usageReport(env));
       if (p === '/usage/budget' && req.method === 'PUT') { const { usd } = await req.json(); await setKV(env, 'budget_usd', usd ? +usd : null); return json(req, { ok: true }); }
@@ -471,6 +556,7 @@ export default {
       }
       if (p === '/workout' && req.method === 'POST') {
         const w = await req.json();
+        (w.exercises || []).forEach(e => { e.name = canonEx(e.name); });
         const r = await env.DB.prepare('INSERT INTO workouts (date,day_name,data,note,created) VALUES (?,?,?,?,?) RETURNING id')
           .bind(w.date || now().slice(0, 10), w.day_name || '', JSON.stringify(w.exercises || []), w.note || '', now()).first();
         return json(req, { id: r.id });

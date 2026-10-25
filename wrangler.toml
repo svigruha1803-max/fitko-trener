@@ -1,0 +1,28 @@
+# Cloudflare Worker "fitko-trener" — nasazuje GitHub Actions (.github/workflows/deploy.yml)
+name = "fitko-trener"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+account_id = "78afbdfd0501d45b8305e41ebb564aca"
+workers_dev = true
+
+[vars]
+VAPID_PUBLIC = "BN073y3UH6-QAtlCEXUbzyw6ZA5rcJWPOV1BHpLI--8Hh7knSafD6JxDtPasz5k24TpPgy8jpHFCX1TNlo17EC0"
+VAPID_SUBJECT = "https://svigruha1803-max.github.io/fitko-trener/"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fitko-db"
+database_id = "d38071fb-ce55-41f3-b01d-e26bd53b63e3"
+
+[[kv_namespaces]]
+binding = "PHOTOS"
+id = "cae318dc15394a8791ed9947c9c8a16a"
+
+[[services]]
+binding = "AI_SVC"
+service = "plavecky-csps-scraper"
+
+[triggers]
+crons = ["0 17 * * *", "0 18 * * SUN"]
+
+# Secrets (nastavují se v Cloudflare, ne tady): APP_PASSWORD, AI_KEY, VAPID_PRIVATE, volitelně ANTHROPIC_API_KEY
