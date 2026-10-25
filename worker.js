@@ -22,7 +22,7 @@ const EX_CATALOG = {
   'Přítahy kladky vsedě': ['seated cable row', 'cable row', 'pritahy kladky vsede', 'veslovani na kladce', 'seated row'],
   'Leg press': ['leg press', 'legpress', 'nozni lis', 'leg-press'],
   'Hip thrust': ['hip thrust', 'hipthrust', 'mostik s cinkou', 'hip-thrust'],
-  'Výpady': ['lunges', 'lunge', 'vypady', 'vypady s jednoruckami', 'walking lunges', 'chuzove vypady'],
+  'Výpady': ['lunges', 'lunge', 'vypady', 'vypady s jednoruckami', 'vypady s cinkami', 'vypady s jednoruckou', 'walking lunges', 'chuzove vypady'],
   'Bulharský dřep': ['bulgarian split squat', 'bulharsky drep', 'split squat', 'bss'],
   'Zakopávání': ['leg curl', 'hamstring curl', 'zakopavani', 'zakopavani na stroji', 'lying leg curl', 'seated leg curl'],
   'Předkopávání': ['leg extension', 'predkopavani', 'predkopavani na stroji', 'extenze kolen'],
@@ -36,6 +36,9 @@ const EX_CATALOG = {
   'Face pull': ['face pull', 'facepull', 'face pulls', 'pritahy lana k obliceji'],
   'Rozpažování': ['fly', 'flyes', 'chest fly', 'pec deck', 'rozpazovani', 'rozpazovani na stroji', 'cable fly', 'butterfly'],
   'Plank': ['plank', 'prkno', 'planking'],
+  'Boční plank': ['side plank', 'bocni plank', 'bocni prkno'],
+  'Vis na hrazdě': ['dead hang', 'vis', 'vis na hrazde'],
+  'Sed u zdi': ['wall sit', 'sed u zdi', 'zidle u zdi'],
   'Zvedání nohou ve visu': ['hanging leg raise', 'leg raise', 'zvedani nohou ve visu', 'zvedani nohou'],
 };
 const exStrip = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -53,6 +56,8 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, p256dh TEXT, auth TEXT, created TEXT)`,
   `CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, day TEXT, kind TEXT, model TEXT, input INTEGER, output INTEGER, cache_read INTEGER, cache_write INTEGER)`,
   `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, salt TEXT, hash TEXT, created TEXT)`,
+  `CREATE TABLE IF NOT EXISTS pairs (a INTEGER, b INTEGER, created TEXT, PRIMARY KEY (a, b))`,
+  `CREATE TABLE IF NOT EXISTS pair_codes (code TEXT PRIMARY KEY, uid INTEGER, created TEXT)`,
 ];
 // uid 1 = majitel (heslo APP_PASSWORD); ostatní profily v tabulce users (id >= 2)
 let schemaReady = false;
@@ -60,6 +65,7 @@ async function ensureSchema(env) {
   if (schemaReady) return;
   await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
   try { await env.DB.prepare('ALTER TABLE workouts ADD COLUMN supps TEXT').run(); } catch (e) {} // migrace: suplementy
+  try { await env.DB.prepare('ALTER TABLE workouts ADD COLUMN partner TEXT').run(); } catch (e) {} // migrace: společné tréninky
   for (const t of ['checkins', 'workouts', 'chat', 'plans', 'push_subs', 'usage']) { try { await env.DB.prepare(`ALTER TABLE ${t} ADD COLUMN uid INTEGER NOT NULL DEFAULT 1`).run(); } catch (e) {} } // migrace: profily
   schemaReady = true;
 }
@@ -93,6 +99,14 @@ const asUser = (env, u) => { const e = Object.create(env); e.UID = u.uid; e.USER
 const kk = (env, k) => (env.UID && env.UID !== 1 ? `u${env.UID}:` : '') + k; // klíče v kv per uživatel (majitel bez prefixu = stará data)
 const pfx = env => (env.UID && env.UID !== 1 ? `u${env.UID}/` : ''); // prefix fotek/záloh v KV
 const genPass = () => { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; const r = crypto.getRandomValues(new Uint8Array(10)); return 'fitko-' + [...r].map(x => a[x % a.length]).join(''); };
+async function partnersOf(env) {
+  const ids = (await env.DB.prepare('SELECT b FROM pairs WHERE a=?').bind(env.UID).all()).results.map(r => r.b);
+  if (!ids.length) return [];
+  const all = await allUsers(env);
+  return all.filter(u => ids.includes(u.uid)).map(u => ({ uid: u.uid, name: u.name }));
+}
+const cleanEx = arr => (Array.isArray(arr) ? arr : []).slice(0, 30).map(e => ({ name: canonEx(String(e.name || '')).slice(0, 60), sets: (Array.isArray(e.sets) ? e.sets : []).slice(0, 20).map(s => { const o = { kg: +s.kg || 0, reps: s.reps == null || s.reps === '' ? null : +s.reps }; if (s.sec != null && s.sec !== '' && !isNaN(+s.sec)) o.sec = Math.max(0, Math.min(3600, +s.sec)); return o; }) }));
+const cleanSupps = a => JSON.stringify((Array.isArray(a) ? a : []).map(x => String(x).slice(0, 40)).slice(0, 12));
 async function allUsers(env) { return [{ uid: 1, name: 'Matty', admin: true }, ...(await env.DB.prepare('SELECT id,name FROM users ORDER BY id').all()).results.map(u => ({ uid: u.id, name: u.name, admin: false }))]; }
 
 async function getKV(env, k, def = null) {
@@ -208,26 +222,57 @@ const trainerBase = env => env.UID && env.UID !== 1
 const PLAN_FORMAT = `Když se domluvíte na novém nebo upraveném plánu, přidej na konec odpovědi PŘESNĚ jeden blok:
 <plan>{"name":"...","goal":"...","days":[{"name":"A – Push","focus":"...","exercises":[{"name":"Bench press","sets":4,"reps":"6-8","rest":"2-3 min","note":"RIR 1-2"}]}],"progression":"pravidlo progrese","evidence":["K2","K3","K11"]}</plan>
 Do "evidence" dej ID tvrzení ze znalostní báze, na kterých plán stojí.
-Názvy cviků piš česky a vždy stejně (pokud cvik už je v plánu nebo historii, použij přesně ten název) – appka podle názvu páruje historii a rekordy. Bez bloku <plan>, pokud plán neměníš. Když se dozvíš trvalé info o uživateli (cíl, výška, věk, zkušenosti, zranění, počet dní v týdnu, délka tréninku), přidej blok <profile>{"klic":"hodnota"}</profile> jen se změněnými položkami. Bloky se uživateli nezobrazují.`;
+Názvy cviků piš česky a vždy stejně (pokud cvik už je v plánu nebo historii, použij přesně ten název) – appka podle názvu páruje historii a rekordy. Bez bloku <plan>, pokud plán neměníš. Když se dozvíš trvalé info o uživateli (cíl, výška, věk, zkušenosti, zranění, počet dní v týdnu, délka tréninku), přidej blok <profile>{"klic":"hodnota"}</profile> jen se změněnými položkami. Když se domluvíte na měřitelných cílech (nebo uživatel cíl změní), přidej blok <goals>[{"type":"weight|waist|lift|freq|custom","target":číslo,"ex":"název cviku jen u lift","label":"jen u custom","unit":"jen u custom","deadline":"YYYY-MM-DD nebo vynech"}]</goals> – pošli VŠECHNY aktuální cíle (nahradí dosavadní). lift = odhad maxima na 1 opakování (e1RM) v kg, freq = tréninků týdně. Cíle musí být realistické vzhledem k datům; tempo opírej o znalostní bázi (např. hubnutí [K17]), jinak to označ jako trenérský odhad. Bloky se uživateli nezobrazují.`;
+const GOAL_TYPES = ['weight', 'waist', 'lift', 'freq', 'custom'];
+function cleanGoals(arr, old = []) {
+  if (!Array.isArray(arr)) return [];
+  return arr.slice(0, 8).map((g, i) => {
+    const type = GOAL_TYPES.includes(g.type) ? g.type : 'custom';
+    const prev = old.find(o => o.type === type && (type !== 'lift' || exKey(o.ex) === exKey(g.ex)) && (type !== 'custom' || o.label === g.label));
+    return {
+      id: String(g.id || prev?.id || Date.now().toString(36) + i), type, target: +g.target || 0,
+      ex: type === 'lift' ? canonEx(String(g.ex || '')).slice(0, 60) : undefined,
+      label: type === 'custom' ? String(g.label || 'Cíl').slice(0, 60) : undefined,
+      unit: type === 'custom' ? String(g.unit || '').slice(0, 12) : undefined,
+      deadline: /^\d{4}-\d{2}-\d{2}$/.test(g.deadline || '') ? g.deadline : undefined,
+      start: g.start != null && g.start !== '' ? +g.start : prev?.start,
+      current: type === 'custom' && g.current != null && g.current !== '' ? +g.current : (type === 'custom' ? prev?.current : undefined),
+      created: /^\d{4}-\d{2}-\d{2}$/.test(g.created || '') ? g.created : (prev?.created || pragueDate()),
+    };
+  }).filter(g => g.target || g.type === 'custom');
+}
 
 async function buildContext(env) {
   const profile = await getKV(env, 'profile', {});
   const plan = await latestPlan(env);
   const checkins = (await env.DB.prepare('SELECT date,weight,waist,note,analysis FROM checkins WHERE uid=? ORDER BY date DESC, id DESC LIMIT 4').bind(env.UID).all()).results;
-  const workouts = (await env.DB.prepare('SELECT date,day_name,data,note,supps FROM workouts WHERE uid=? ORDER BY date DESC, id DESC LIMIT 12').bind(env.UID).all()).results;
+  const workouts = (await env.DB.prepare('SELECT date,day_name,data,note,supps,partner FROM workouts WHERE uid=? ORDER BY date DESC, id DESC LIMIT 12').bind(env.UID).all()).results;
   const memory = await getKV(env, 'memory', '');
   let ctx = `\n\n=== PROFIL ===\n${JSON.stringify(profile)}`;
+  const goals = await getKV(env, 'goals', []);
+  ctx += `\n\n=== CÍLE UŽIVATELE ===\n${goals.length ? JSON.stringify(goals) : 'zatím nenastavené – když to dává smysl, navrhni je'}`;
   if (memory) ctx += `\n\n=== DLOUHODOBÁ PAMĚŤ (co víš o uživateli z dřívějších rozhovorů) ===\n${memory}`;
   ctx += `\n\n=== AKTUÁLNÍ PLÁN ===\n${plan ? JSON.stringify({ name: plan.name, goal: plan.goal, days: plan.days, progression: plan.progression }) : 'zatím žádný'}`;
   ctx += `\n\n=== CHECK-INY (nejnovější první) ===\n` + (checkins.length ? checkins.map(c => `${c.date}: váha ${c.weight ?? '-'} kg, pas ${c.waist ?? '-'} cm${c.note ? ', pozn: ' + c.note : ''}${c.analysis ? '\nAnalýza: ' + c.analysis.slice(0, 1200) : ''}`).join('\n\n') : 'žádné');
-  ctx += `\n\n=== POSLEDNÍ TRÉNINKY ===\n` + (workouts.length ? workouts.map(w => `${w.date} ${w.day_name || ''}: ${compactWorkout(w.data)}${w.note ? ' | ' + w.note : ''}${suppsTxt(w.supps)}`).join('\n') : 'žádné');
+  const lc = await loadCtx(env);
+  ctx += `\n\n=== POSLEDNÍ TRÉNINKY ===\n` + (workouts.length ? workouts.map(w => `${w.date} ${w.day_name || ''}${w.partner ? ' [společně s ' + w.partner + ']' : ''}: ${compactWorkout(w.data, lc)}${w.note ? ' | ' + w.note : ''}${suppsTxt(w.supps)}`).join('\n') : 'žádné');
   ctx += `\n\nDnešní datum: ${new Date().toLocaleDateString('cs-CZ', { timeZone: 'Europe/Prague' })}`;
   return { ctx, profile };
 }
+/* ---------- zátěž: váha stroje/saní + tělesná váha (u shybů, dipů) ---------- */
+const BW_DEFAULT = new Set(['Shyby', 'Kliky na bradlech'].map(n => exKey(n)));
+function loadCfg(exset, name) { const c = (exset || {})[exKey(name)] || {}; return { base: +c.base || 0, bw: c.bw != null ? !!c.bw : BW_DEFAULT.has(exKey(name)) }; }
+const effKg = (exset, bwKg, name, kg) => { const c = loadCfg(exset, name); return (+kg || 0) + c.base + (c.bw ? (+bwKg || 0) : 0); };
+async function loadCtx(env) {
+  const exset = await getKV(env, 'ex_settings', {});
+  const bw = await env.DB.prepare('SELECT weight FROM checkins WHERE uid=? AND weight IS NOT NULL ORDER BY date DESC, id DESC LIMIT 1').bind(env.UID).first();
+  return { exset, bw: bw?.weight || 0 };
+}
 const suppsTxt = s => { try { const a = JSON.parse(s || '[]'); return a.length ? ' | suplementy: ' + a.join(', ') : ''; } catch { return ''; } };
-function compactWorkout(data) {
+function compactWorkout(data, lc) {
   try {
-    return JSON.parse(data).map(e => `${e.name} ${e.sets.filter(s => s.reps).map(s => `${s.kg ?? 0}×${s.reps}`).join(',')}`).join('; ');
+    return JSON.parse(data).map(e => { const c = lc ? loadCfg(lc.exset, e.name) : { base: 0, bw: false }; const extra = [c.base ? `+${c.base} kg stroj/saně` : '', c.bw ? '+tělesná váha' : ''].filter(Boolean).join(', ');
+      return `${e.name}${extra ? ` (zapsané kg ${extra})` : ''} ${e.sets.filter(s => s.reps || s.sec).map(s => s.sec ? `${s.sec}s${+s.kg ? '+' + s.kg + 'kg' : ''}` : `${s.kg ?? 0}×${s.reps}`).join(',')}`; }).join('; ');
   } catch { return ''; }
 }
 
@@ -245,6 +290,11 @@ async function extractBlocks(env, text) {
         planSaved = plan.name || true;
       }
     } catch {}
+  }
+  const gm = text.match(/<goals>([\s\S]*?)<\/goals>/);
+  if (gm) {
+    clean = clean.replace(gm[0], '');
+    try { const old = await getKV(env, 'goals', []); await setKV(env, 'goals', cleanGoals(JSON.parse(gm[1].trim()), old)); planSaved = planSaved || 'goals'; } catch {}
   }
   const fm = text.match(/<profile>([\s\S]*?)<\/profile>/);
   if (fm) {
@@ -318,7 +368,7 @@ async function handleCheckin(req, env) {
       content.push({ type: 'text', text: `Poznámka: ${note || '-'}\n\nUdělej check-in analýzu: 1) co je vidět (postava, svalové partie, držení těla), 2) ${prev ? 'změny oproti předchozímu check-inu' : 'výchozí stav — první check-in'}, 3) slabé partie a co v plánu posílit/upravit, 4) zhodnocení váhy a pasu. Max ~250 slov, bez Markdown nadpisů. Pokud fotky nejsou srovnatelné (světlo, poloha, vzdálenost), řekni to.` });
       const { ctx } = await buildContext(env);
       analysis = await callAI(env, trainerBase(env) + ctx, [{ role: 'user', content }], 1500, 'checkin');
-      analysis = analysis.replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
+      analysis = analysis.replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>|<goals>[\s\S]*?<\/goals>/g, '').trim();
       await env.DB.prepare('UPDATE checkins SET analysis=? WHERE id=? AND uid=?').bind(analysis, id, env.UID).run();
       await env.DB.prepare('INSERT INTO chat (uid,role,content,created) VALUES (?,?,?,?)').bind(env.UID, 'assistant', `📸 Check-in ${date}\n\n${analysis}`, now()).run();
     } catch (e) { error = String(e.message || e); }
@@ -437,7 +487,7 @@ Napiš krátký ranní briefing (max ~170 slov, bez Markdown nadpisů, tykej, Br
 2) návrhy jídel na dnešek seřazené podle času (snídaně${slot === 'volno' ? ', oběd, večeře' : ', jídlo před tréninkem, po tréninku, večeře'}) – konkrétní běžná jídla z české kuchyně/obchodu, s přibližnou bílkovinou v g, sladěné s cílem z profilu; před tréninkem lehčí a stravitelnější, čím blíž tréninku, tím menší porce (obecná praxe),
 3) kdy si vzít suplementy, které používá.
 Odborná tvrzení (dávky bílkovin, kreatin, načasování) jen ze znalostní báze s citací [K#]. U kreatinu: báze nestanovuje ideální čas vůči tréninku – důležité je brát ho denně. Nevymýšlej čísla mimo bázi a nic nediagnostikuj.`;
-  rec.text = (await callAI(env, trainerBase(env) + ctx, [{ role: 'user', content: ask }], 900, 'morning')).replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
+  rec.text = (await callAI(env, trainerBase(env) + ctx, [{ role: 'user', content: ask }], 900, 'morning')).replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>|<goals>[\s\S]*?<\/goals>/g, '').trim();
   await setKV(env, 'morning', rec);
   await env.DB.prepare('INSERT INTO chat (uid,role,content,created) VALUES (?,?,?,?)').bind(env.UID, 'assistant', `☀️ Ranní briefing – gym ${when}\n\n${rec.text}`, now()).run();
   return rec;
@@ -449,13 +499,13 @@ async function weeklySummary(env, push = true) {
   const fromS = from.toISOString().slice(0, 10);
   const all = (await env.DB.prepare('SELECT date,day_name,data,note,supps FROM workouts WHERE uid=? ORDER BY date ASC').bind(env.UID).all()).results.map(w => ({ ...w, data: JSON.parse(w.data || '[]'), supps: JSON.parse(w.supps || '[]') }));
   const week = all.filter(w => w.date >= fromS), before = all.filter(w => w.date < fromS);
-  const bestBefore = {};
-  for (const w of before) for (const e of w.data) for (const s of e.sets) if (s.reps) bestBefore[exKey(e.name)] = Math.max(bestBefore[exKey(e.name)] || 0, e1rm(s.kg, s.reps));
+  const bestBefore = {}, lc = await loadCtx(env), ek_ = (e, s) => effKg(lc.exset, lc.bw, e.name, s.kg);
+  for (const w of before) for (const e of w.data) for (const s of e.sets) if (s.reps) bestBefore[exKey(e.name)] = Math.max(bestBefore[exKey(e.name)] || 0, e1rm(ek_(e, s), s.reps));
   const prs = [], perEx = {};
   let vol = 0, sets = 0;
   for (const w of week) for (const e of w.data) for (const s of e.sets) {
-    vol += (+s.kg || 0) * (+s.reps || 0); sets++;
-    const v = e1rm(s.kg, s.reps);
+    vol += ek_(e, s) * (+s.reps || 0); sets++;
+    const v = e1rm(ek_(e, s), s.reps);
     const ek = exKey(e.name);
     if (s.reps && bestBefore[ek] && v > bestBefore[ek] + .01 && (!perEx[ek] || v > perEx[ek].v)) perEx[ek] = { v, kg: s.kg, reps: s.reps, name: canonEx(e.name) };
   }
@@ -471,7 +521,7 @@ Poznámky z tréninků: ${week.map(w => w.note).filter(Boolean).join(' | ') || '
 Suplementy (zaškrtnuté u tréninků): ${(() => { const c = {}; week.forEach(w => w.supps.forEach(x => c[x] = (c[x] || 0) + 1)); return Object.entries(c).map(([k, v]) => `${k} ${v}/${week.length}`).join(', ') || 'nic nezaškrtnuto'; })()}.`;
   const { ctx } = await buildContext(env);
   const text = (await callAI(env, trainerBase(env) + ctx, [{ role: 'user', content: `Napiš týdenní souhrn (max ~150 slov, bez Markdown nadpisů): 1) jak dopadl týden vs. cíl, 2) rekordy a pokrok, 3) jedna až dvě konkrétní úpravy na příští týden. Použij jen tato data, nic si nevymýšlej:\n${stats}` }], 900, 'summary'))
-    .replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
+    .replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>|<goals>[\s\S]*?<\/goals>/g, '').trim();
   await env.DB.prepare('INSERT INTO chat (uid,role,content,created) VALUES (?,?,?,?)').bind(env.UID, 'assistant', `🗓️ Týdenní souhrn (${fromS.slice(5).split('-').reverse().join('.')}–${today.slice(5).split('-').reverse().join('.')})\n\n${text}`, now()).run();
   await setKV(env, 'last_summary', { date: today, text });
   let sent = null;
@@ -492,9 +542,9 @@ async function exportAll(env) {
   const q = async sql => (await env.DB.prepare(sql).bind(env.UID).all()).results;
   return {
     app: 'fitko-robutek', exported: now(), version: 1, user: env.USER?.name || null,
-    profile: await getKV(env, 'profile', {}), memory: await getKV(env, 'memory', ''),
+    profile: await getKV(env, 'profile', {}), goals: await getKV(env, 'goals', []), ex_settings: await getKV(env, 'ex_settings', {}), memory: await getKV(env, 'memory', ''),
     plans: (await q('SELECT id,data,created FROM plans WHERE uid=? ORDER BY id')).map(r => ({ ...r, data: JSON.parse(r.data) })),
-    workouts: (await q('SELECT id,date,day_name,data,note,supps,created FROM workouts WHERE uid=? ORDER BY date,id')).map(r => ({ ...r, data: JSON.parse(r.data || '[]'), supps: JSON.parse(r.supps || '[]') })),
+    workouts: (await q('SELECT id,date,day_name,data,note,supps,partner,created FROM workouts WHERE uid=? ORDER BY date,id')).map(r => ({ ...r, data: JSON.parse(r.data || '[]'), supps: JSON.parse(r.supps || '[]') })),
     checkins: (await q('SELECT id,date,weight,waist,note,photos,analysis,created FROM checkins WHERE uid=? ORDER BY date,id')).map(r => ({ ...r, photos: JSON.parse(r.photos || '{}') })),
     chat: await q('SELECT role,content,created FROM chat WHERE uid=? ORDER BY id'),
     usage: await q('SELECT day,kind,model,SUM(input) input,SUM(output) output,COUNT(*) calls FROM usage WHERE uid=? GROUP BY day,kind,model ORDER BY day'),
@@ -575,15 +625,16 @@ export default {
         const plan = await latestPlan(env);
         const checkins = (await env.DB.prepare('SELECT id,date,weight,waist,note,photos,analysis FROM checkins WHERE uid=? ORDER BY date DESC, id DESC LIMIT 50').bind(env.UID).all()).results
           .map(c => ({ ...c, photos: JSON.parse(c.photos || '{}') }));
-        const workouts = (await env.DB.prepare('SELECT id,date,day_name,data,note,supps FROM workouts WHERE uid=? ORDER BY date DESC, id DESC LIMIT 60').bind(env.UID).all()).results
+        const workouts = (await env.DB.prepare('SELECT id,date,day_name,data,note,supps,partner FROM workouts WHERE uid=? ORDER BY date DESC, id DESC LIMIT 60').bind(env.UID).all()).results
           .map(w => ({ ...w, data: JSON.parse(w.data || '[]'), supps: JSON.parse(w.supps || '[]') }));
         const chat = (await env.DB.prepare('SELECT id,role,content,created FROM chat WHERE uid=? ORDER BY id DESC LIMIT 80').bind(env.UID).all()).results.reverse();
         const mu = await env.DB.prepare('SELECT model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw FROM usage WHERE uid=? AND day LIKE ? GROUP BY model').bind(env.UID, new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }).slice(0, 7) + '%').all();
         const usage = { monthUsd: mu.results.reduce((a, r) => a + usdOf(r.model, r.i, r.o, r.cr, r.cw), 0), budget: await getKV(env, 'budget_usd') };
         const mo = await getKV(env, 'morning');
         const morning = { today: mo && mo.date === pragueDate() ? mo : null, on: (await getKV(env, 'morning_on', true)) !== false, date: pragueDate() };
-        return json(req, { me: { uid: user.uid, name: user.name, admin: user.admin }, profile, plan, checkins, workouts, chat, usage, morning });
+        return json(req, { me: { uid: user.uid, name: user.name, admin: user.admin }, goals: await getKV(env, 'goals', []), exset: await getKV(env, 'ex_settings', {}), partners: await partnersOf(env), profile, plan, checkins, workouts, chat, usage, morning });
       }
+      if (p === '/goals' && req.method === 'PUT') { const { goals } = await req.json(); const g = cleanGoals(goals, await getKV(env, 'goals', [])); await setKV(env, 'goals', g); return json(req, { goals: g }); }
       if (p === '/profile' && req.method === 'PUT') {
         const body = await req.json();
         await setKV(env, 'profile', body);
@@ -648,10 +699,53 @@ export default {
       }
       if (p === '/workout' && req.method === 'POST') {
         const w = await req.json();
-        (w.exercises || []).forEach(e => { e.name = canonEx(e.name); });
-        const r = await env.DB.prepare('INSERT INTO workouts (uid,date,day_name,data,note,supps,created) VALUES (?,?,?,?,?,?,?) RETURNING id')
-          .bind(env.UID, w.date || now().slice(0, 10), w.day_name || '', JSON.stringify(w.exercises || []), w.note || '', JSON.stringify((Array.isArray(w.supps) ? w.supps : []).map(x => String(x).slice(0, 40)).slice(0, 12)), now()).first();
-        return json(req, { id: r.id });
+        const ex = cleanEx(w.exercises), date = /^\d{4}-\d{2}-\d{2}$/.test(w.date || '') ? w.date : pragueDate();
+        const mates = (await partnersOf(env)).filter(x => (Array.isArray(w.with) ? w.with.map(Number) : []).includes(x.uid));
+        const r = await env.DB.prepare('INSERT INTO workouts (uid,date,day_name,data,note,supps,partner,created) VALUES (?,?,?,?,?,?,?,?) RETURNING id')
+          .bind(env.UID, date, String(w.day_name || '').slice(0, 60), JSON.stringify(ex), String(w.note || '').slice(0, 2000), cleanSupps(w.supps), mates.map(x => x.name).join(', ') || null, now()).first();
+        const shared = [];
+        for (const mt of mates) { // propsat trénink parťákovi (jeho váhy si může upravit)
+          const me = user.name;
+          const others = mates.filter(x => x.uid !== mt.uid).map(x => x.name);
+          await env.DB.prepare('INSERT INTO workouts (uid,date,day_name,data,note,supps,partner,created) VALUES (?,?,?,?,?,?,?,?)')
+            .bind(mt.uid, date, String(w.day_name || '').slice(0, 60), JSON.stringify(ex), `👥 Zapsal(a) ${me} – zkontroluj si svoje váhy a opakování.`, '[]', [me, ...others].join(', '), now()).run();
+          try { await pushAll(asUser(env, mt), { title: `👥 ${me} zapsal(a) váš společný trénink`, body: `${String(w.day_name || 'Trénink')} ${date.split('-').reverse().join('.')} – zkontroluj si váhy.`, tag: 'pair', url: './?v=log' }); } catch (e) {}
+          shared.push(mt.name);
+        }
+        return json(req, { id: r.id, shared });
+      }
+      if ((m = p.match(/^\/workout\/(\d+)$/)) && req.method === 'PUT') {
+        const w = await req.json();
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(w.date || '') ? w.date : pragueDate();
+        const r = await env.DB.prepare('UPDATE workouts SET date=?, day_name=?, data=?, note=?, supps=? WHERE id=? AND uid=?')
+          .bind(date, String(w.day_name || '').slice(0, 60), JSON.stringify(cleanEx(w.exercises)), String(w.note || '').slice(0, 2000), cleanSupps(w.supps), +m[1], env.UID).run();
+        return r.meta?.changes ? json(req, { ok: true }) : json(req, { error: 'not found' }, 404);
+      }
+      if (p === '/exset' && req.method === 'PUT') {
+        const { name, base, bw } = await req.json();
+        const set = await getKV(env, 'ex_settings', {}); const k = exKey(name);
+        if (!k) return json(req, { error: 'chybí cvik' }, 400);
+        set[k] = { base: Math.max(0, Math.min(500, +base || 0)), bw: !!bw };
+        await setKV(env, 'ex_settings', set); return json(req, { exset: set });
+      }
+      if (p === '/pair/code' && req.method === 'POST') {
+        const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; const code = [...crypto.getRandomValues(new Uint8Array(6))].map(x => a[x % a.length]).join('');
+        await env.DB.batch([env.DB.prepare('DELETE FROM pair_codes WHERE uid=?').bind(env.UID), env.DB.prepare('INSERT INTO pair_codes (code,uid,created) VALUES (?,?,?)').bind(code, env.UID, now())]);
+        return json(req, { code });
+      }
+      if (p === '/pair' && req.method === 'POST') {
+        const code = String((await req.json()).code || '').trim().toUpperCase();
+        const c = await env.DB.prepare('SELECT uid,created FROM pair_codes WHERE code=?').bind(code).first();
+        if (!c || Date.now() - new Date(c.created) > 48 * 3600e3) return json(req, { error: 'Kód neplatí (je špatně, nebo je starší než 48 h).' }, 404);
+        if (c.uid === env.UID) return json(req, { error: 'To je tvůj vlastní kód 🙂' }, 400);
+        await env.DB.batch([env.DB.prepare('INSERT OR IGNORE INTO pairs (a,b,created) VALUES (?,?,?)').bind(env.UID, c.uid, now()), env.DB.prepare('INSERT OR IGNORE INTO pairs (a,b,created) VALUES (?,?,?)').bind(c.uid, env.UID, now()), env.DB.prepare('DELETE FROM pair_codes WHERE code=?').bind(code)]);
+        const mate = (await allUsers(env)).find(u => u.uid === c.uid);
+        try { await pushAll(asUser(env, mate), { title: '👥 Máš parťáka!', body: `${user.name} se s tebou propojil(a). Společné tréninky se vám teď budou propisovat.`, tag: 'pair', url: './' }); } catch (e) {}
+        return json(req, { partners: await partnersOf(env) });
+      }
+      if ((m = p.match(/^\/pair\/(\d+)$/)) && req.method === 'DELETE') {
+        await env.DB.batch([env.DB.prepare('DELETE FROM pairs WHERE a=? AND b=?').bind(env.UID, +m[1]), env.DB.prepare('DELETE FROM pairs WHERE a=? AND b=?').bind(+m[1], env.UID)]);
+        return json(req, { partners: await partnersOf(env) });
       }
       if ((m = p.match(/^\/workout\/(\d+)$/)) && req.method === 'DELETE') {
         await env.DB.prepare('DELETE FROM workouts WHERE id=? AND uid=?').bind(+m[1], env.UID).run();
@@ -678,7 +772,7 @@ export default {
         }
         if ((m = p.match(/^\/users\/(\d+)$/)) && req.method === 'DELETE') {
           const id = +m[1]; if (id < 2) return json(req, { error: 'majitele nelze smazat' }, 400);
-          await env.DB.batch(['checkins', 'workouts', 'chat', 'plans', 'push_subs', 'usage'].map(t => env.DB.prepare(`DELETE FROM ${t} WHERE uid=?`).bind(id)).concat([env.DB.prepare('DELETE FROM kv WHERE k LIKE ?').bind(`u${id}:%`), env.DB.prepare('DELETE FROM users WHERE id=?').bind(id)]));
+          await env.DB.batch(['checkins', 'workouts', 'chat', 'plans', 'push_subs', 'usage'].map(t => env.DB.prepare(`DELETE FROM ${t} WHERE uid=?`).bind(id)).concat([env.DB.prepare('DELETE FROM kv WHERE k LIKE ?').bind(`u${id}:%`), env.DB.prepare('DELETE FROM users WHERE id=?').bind(id), env.DB.prepare('DELETE FROM pairs WHERE a=? OR b=?').bind(id, id), env.DB.prepare('DELETE FROM pair_codes WHERE uid=?').bind(id)]));
           let cur; do { const l = await env.PHOTOS.list({ prefix: `u${id}/`, cursor: cur }); for (const k of l.keys) await env.PHOTOS.delete(k.name); cur = l.list_complete ? null : l.cursor; } while (cur);
           return json(req, { ok: true });
         }
