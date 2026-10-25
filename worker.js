@@ -52,12 +52,15 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT, created TEXT)`,
   `CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, p256dh TEXT, auth TEXT, created TEXT)`,
   `CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, day TEXT, kind TEXT, model TEXT, input INTEGER, output INTEGER, cache_read INTEGER, cache_write INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, salt TEXT, hash TEXT, created TEXT)`,
 ];
+// uid 1 = majitel (heslo APP_PASSWORD); ostatní profily v tabulce users (id >= 2)
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
   try { await env.DB.prepare('ALTER TABLE workouts ADD COLUMN supps TEXT').run(); } catch (e) {} // migrace: suplementy
+  for (const t of ['checkins', 'workouts', 'chat', 'plans', 'push_subs', 'usage']) { try { await env.DB.prepare(`ALTER TABLE ${t} ADD COLUMN uid INTEGER NOT NULL DEFAULT 1`).run(); } catch (e) {} } // migrace: profily
   schemaReady = true;
 }
 
@@ -75,26 +78,33 @@ function cors(req) {
 const json = (req, data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...cors(req) } });
 
-function authed(req, env) {
+const sha256hex = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, '0')).join('');
+const eqStr = (a, b) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; };
+async function authUser(req, env) {
   const h = req.headers.get('Authorization') || '';
   const t = h.startsWith('Bearer ') ? h.slice(7) : '';
-  const p = env.APP_PASSWORD || '';
-  if (!p || t.length !== p.length) return false;
-  let d = 0;
-  for (let i = 0; i < p.length; i++) d |= t.charCodeAt(i) ^ p.charCodeAt(i);
-  return d === 0;
+  if (!t) return null;
+  if (env.APP_PASSWORD && eqStr(t, env.APP_PASSWORD)) return { uid: 1, name: 'Matty', admin: true };
+  const users = (await env.DB.prepare('SELECT id,name,salt,hash FROM users').all()).results;
+  for (const u of users) if (eqStr(await sha256hex(u.salt + ':' + t), u.hash)) return { uid: u.id, name: u.name, admin: false };
+  return null;
 }
+const asUser = (env, u) => { const e = Object.create(env); e.UID = u.uid; e.USER = u; return e; };
+const kk = (env, k) => (env.UID && env.UID !== 1 ? `u${env.UID}:` : '') + k; // klíče v kv per uživatel (majitel bez prefixu = stará data)
+const pfx = env => (env.UID && env.UID !== 1 ? `u${env.UID}/` : ''); // prefix fotek/záloh v KV
+const genPass = () => { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; const r = crypto.getRandomValues(new Uint8Array(10)); return 'fitko-' + [...r].map(x => a[x % a.length]).join(''); };
+async function allUsers(env) { return [{ uid: 1, name: 'Matty', admin: true }, ...(await env.DB.prepare('SELECT id,name FROM users ORDER BY id').all()).results.map(u => ({ uid: u.id, name: u.name, admin: false }))]; }
 
 async function getKV(env, k, def = null) {
-  const r = await env.DB.prepare('SELECT v FROM kv WHERE k=?').bind(k).first();
+  const r = await env.DB.prepare('SELECT v FROM kv WHERE k=?').bind(kk(env, k)).first();
   return r ? JSON.parse(r.v) : def;
 }
 async function setKV(env, k, v) {
   await env.DB.prepare('INSERT INTO kv (k,v,updated) VALUES (?,?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, updated=excluded.updated')
-    .bind(k, JSON.stringify(v), now()).run();
+    .bind(kk(env, k), JSON.stringify(v), now()).run();
 }
 async function latestPlan(env) {
-  const r = await env.DB.prepare('SELECT id,data,created FROM plans ORDER BY id DESC LIMIT 1').first();
+  const r = await env.DB.prepare('SELECT id,data,created FROM plans WHERE uid=? ORDER BY id DESC LIMIT 1').bind(env.UID).first();
   return r ? { id: r.id, created: r.created, ...JSON.parse(r.data) } : null;
 }
 
@@ -103,11 +113,19 @@ const PRICES = { 'claude-sonnet-4-6': { input: 3, output: 15, cache_read: 0.30, 
 const usdOf = (m, i, o, cr = 0, cw = 0) => { const p = PRICES[m] || PRICES[MODEL]; return (i * p.input + o * p.output + cr * p.cache_read + cw * p.cache_write) / 1e6; };
 async function logUsage(env, kind, model, u) {
   try {
-    await env.DB.prepare('INSERT INTO usage (ts,day,kind,model,input,output,cache_read,cache_write) VALUES (?,?,?,?,?,?,?,?)')
-      .bind(now(), new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }), kind, model, u.input_tokens || 0, u.output_tokens || 0, u.cache_read_input_tokens || 0, u.cache_creation_input_tokens || 0).run();
+    await env.DB.prepare('INSERT INTO usage (uid,ts,day,kind,model,input,output,cache_read,cache_write) VALUES (?,?,?,?,?,?,?,?,?)')
+      .bind(env.UID || 1, now(), new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }), kind, model, u.input_tokens || 0, u.output_tokens || 0, u.cache_read_input_tokens || 0, u.cache_creation_input_tokens || 0).run();
   } catch (e) {}
 }
+async function monthUsd(env) {
+  const r = (await env.DB.prepare('SELECT model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw FROM usage WHERE uid=? AND day LIKE ? GROUP BY model').bind(env.UID || 1, new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }).slice(0, 7) + '%').all()).results;
+  return r.reduce((a, x) => a + usdOf(x.model, x.i, x.o, x.cr, x.cw), 0);
+}
 async function callAI(env, system, messages, max_tokens = 3000, kind = 'chat') {
+  if (env.UID && env.UID !== 1) { // ostatní profily: tvrdý měsíční limit, který nastavuje majitel
+    const cap = await getKV(env, 'budget_usd');
+    if (cap && await monthUsd(env) >= cap) throw new Error(`Měsíční limit AI ($${cap}) je vyčerpaný – napiš Mattymu, ať ho navýší.`);
+  }
   const body = JSON.stringify({ model: MODEL, max_tokens, system, messages });
   // vlastní klíč Fitka (secret ANTHROPIC_API_KEY) má přednost; jinak přes Robůtkův Worker
   const res = env.ANTHROPIC_API_KEY
@@ -183,6 +201,9 @@ const TRAINER_BASE = `Jsi "Fitko robůtek" — osobní live fitness trenér Mát
 Principy: progresivní přetížení, dostatečný týdenní objem na partii, technika a regenerace, rozumná frekvence. Když si nejsi jistý, řekni to.
 Z fotek NEUVÁDĚJ procento tuku jako fakt — vizuální odhad z fotky je nepřesný; popisuj kvalitativní změny a ber ohled na rozdíly v osvětlení/pozici. Hlavní objektivní metriky: váha, obvod pasu, výkony v logu.
 Nejsi lékař: při bolesti, zranění nebo zdravotním problému doporuč odborníka.` + KB_PROMPT;
+const trainerBase = env => env.UID && env.UID !== 1
+  ? TRAINER_BASE.replace('osobní live fitness trenér Mátyáse (plavecký trenér, chodí do plně vybavené posilovny)', `osobní live fitness trenér uživatele jménem ${String(env.USER?.name || '').slice(0, 40)} (chodí do plně vybavené posilovny; další info o něm je v profilu)`)
+  : TRAINER_BASE;
 
 const PLAN_FORMAT = `Když se domluvíte na novém nebo upraveném plánu, přidej na konec odpovědi PŘESNĚ jeden blok:
 <plan>{"name":"...","goal":"...","days":[{"name":"A – Push","focus":"...","exercises":[{"name":"Bench press","sets":4,"reps":"6-8","rest":"2-3 min","note":"RIR 1-2"}]}],"progression":"pravidlo progrese","evidence":["K2","K3","K11"]}</plan>
@@ -192,8 +213,8 @@ Názvy cviků piš česky a vždy stejně (pokud cvik už je v plánu nebo histo
 async function buildContext(env) {
   const profile = await getKV(env, 'profile', {});
   const plan = await latestPlan(env);
-  const checkins = (await env.DB.prepare('SELECT date,weight,waist,note,analysis FROM checkins ORDER BY date DESC, id DESC LIMIT 4').all()).results;
-  const workouts = (await env.DB.prepare('SELECT date,day_name,data,note,supps FROM workouts ORDER BY date DESC, id DESC LIMIT 12').all()).results;
+  const checkins = (await env.DB.prepare('SELECT date,weight,waist,note,analysis FROM checkins WHERE uid=? ORDER BY date DESC, id DESC LIMIT 4').bind(env.UID).all()).results;
+  const workouts = (await env.DB.prepare('SELECT date,day_name,data,note,supps FROM workouts WHERE uid=? ORDER BY date DESC, id DESC LIMIT 12').bind(env.UID).all()).results;
   const memory = await getKV(env, 'memory', '');
   let ctx = `\n\n=== PROFIL ===\n${JSON.stringify(profile)}`;
   if (memory) ctx += `\n\n=== DLOUHODOBÁ PAMĚŤ (co víš o uživateli z dřívějších rozhovorů) ===\n${memory}`;
@@ -220,7 +241,7 @@ async function extractBlocks(env, text) {
       const plan = JSON.parse(pm[1].trim());
       if (Array.isArray(plan.days)) {
         plan.days.forEach(d => (d.exercises || []).forEach(e => { e.name = canonEx(e.name); }));
-        await env.DB.prepare('INSERT INTO plans (data,created) VALUES (?,?)').bind(JSON.stringify(plan), now()).run();
+        await env.DB.prepare('INSERT INTO plans (uid,data,created) VALUES (?,?,?)').bind(env.UID, JSON.stringify(plan), now()).run();
         planSaved = plan.name || true;
       }
     } catch {}
@@ -240,8 +261,8 @@ async function extractBlocks(env, text) {
 async function handleChat(req, env) {
   const { message } = await req.json();
   if (!message || !message.trim()) return json(req, { error: 'empty' }, 400);
-  await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('user', message.trim(), now()).run();
-  const hist = (await env.DB.prepare('SELECT role,content FROM chat ORDER BY id DESC LIMIT 24').all()).results.reverse();
+  await env.DB.prepare('INSERT INTO chat (uid,role,content,created) VALUES (?,?,?,?)').bind(env.UID, 'user', message.trim(), now()).run();
+  const hist = (await env.DB.prepare('SELECT role,content FROM chat WHERE uid=? ORDER BY id DESC LIMIT 24').bind(env.UID).all()).results.reverse();
   // Anthropic needs alternating roles starting with user
   const msgs = [];
   for (const m of hist) {
@@ -254,10 +275,10 @@ async function handleChat(req, env) {
   const onboarding = !profile || Object.keys(profile).length < 3
     ? '\n\nProfil je skoro prázdný: nejdřív se krátce doptej na cíl, věk, výšku, zkušenosti s posilovnou, zranění, počet tréninků týdně a délku tréninku (max 3 otázky naráz). Plán navrhni až budeš mít dost informací.'
     : '';
-  const reply = await callAI(env, TRAINER_BASE + '\n\n' + PLAN_FORMAT + onboarding + ctx, msgs);
+  const reply = await callAI(env, trainerBase(env) + '\n\n' + PLAN_FORMAT + onboarding + ctx, msgs);
   const { clean, planSaved } = await extractBlocks(env, reply);
-  await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', clean, now()).run();
-  const cnt = await env.DB.prepare("SELECT COUNT(*) n FROM chat WHERE role='user'").first();
+  await env.DB.prepare('INSERT INTO chat (uid,role,content,created) VALUES (?,?,?,?)').bind(env.UID, 'assistant', clean, now()).run();
+  const cnt = await env.DB.prepare("SELECT COUNT(*) n FROM chat WHERE role='user' AND uid=?").bind(env.UID).first();
   if (cnt && cnt.n % 6 === 0) { try { await updateMemory(env); } catch (e) {} }
   return json(req, { reply: clean, planSaved });
 }
@@ -274,32 +295,32 @@ async function handleCheckin(req, env) {
     const f = fd.get(angle);
     if (f && typeof f === 'object' && f.size) {
       if (f.size > 8 * 1024 * 1024) return json(req, { error: 'Fotka je moc velká' }, 413);
-      const key = `checkins/${date}/${stamp}-${angle}.jpg`;
+      const key = `${pfx(env)}checkins/${date}/${stamp}-${angle}.jpg`;
       await env.PHOTOS.put(key, await f.arrayBuffer(), { metadata: { ct: f.type || 'image/jpeg' } });
       photos[angle] = key;
     }
   }
-  const ins = await env.DB.prepare('INSERT INTO checkins (date,weight,waist,note,photos,created) VALUES (?,?,?,?,?,?) RETURNING id')
-    .bind(date, weight, waist, note, JSON.stringify(photos), now()).first();
+  const ins = await env.DB.prepare('INSERT INTO checkins (uid,date,weight,waist,note,photos,created) VALUES (?,?,?,?,?,?,?) RETURNING id')
+    .bind(env.UID, date, weight, waist, note, JSON.stringify(photos), now()).first();
   const id = ins.id;
 
   let analysis = null, error = null;
   if (Object.keys(photos).length) {
     try {
-      const prev = await env.DB.prepare('SELECT date,weight,waist,photos FROM checkins WHERE id<>? AND photos<>? ORDER BY date DESC, id DESC LIMIT 1')
-        .bind(id, '{}').first();
-      const first = await env.DB.prepare('SELECT date,weight,waist,photos FROM checkins WHERE id<>? AND photos<>? ORDER BY date ASC, id ASC LIMIT 1')
-        .bind(id, '{}').first();
+      const prev = await env.DB.prepare('SELECT date,weight,waist,photos FROM checkins WHERE id<>? AND photos<>? AND uid=? ORDER BY date DESC, id DESC LIMIT 1')
+        .bind(id, '{}', env.UID).first();
+      const first = await env.DB.prepare('SELECT date,weight,waist,photos FROM checkins WHERE id<>? AND photos<>? AND uid=? ORDER BY date ASC, id ASC LIMIT 1')
+        .bind(id, '{}', env.UID).first();
       const content = [];
       content.push(...await photoBlocks(env, photos, `AKTUÁLNÍ check-in ${date} (váha ${weight ?? '-'} kg, pas ${waist ?? '-'} cm)`));
       if (prev) content.push(...await photoBlocks(env, JSON.parse(prev.photos), `PŘEDCHOZÍ check-in ${prev.date} (váha ${prev.weight ?? '-'} kg, pas ${prev.waist ?? '-'} cm)`));
       if (first && prev && first.date !== prev.date) content.push({ type: 'text', text: `První check-in byl ${first.date}: váha ${first.weight ?? '-'} kg, pas ${first.waist ?? '-'} cm.` });
       content.push({ type: 'text', text: `Poznámka: ${note || '-'}\n\nUdělej check-in analýzu: 1) co je vidět (postava, svalové partie, držení těla), 2) ${prev ? 'změny oproti předchozímu check-inu' : 'výchozí stav — první check-in'}, 3) slabé partie a co v plánu posílit/upravit, 4) zhodnocení váhy a pasu. Max ~250 slov, bez Markdown nadpisů. Pokud fotky nejsou srovnatelné (světlo, poloha, vzdálenost), řekni to.` });
       const { ctx } = await buildContext(env);
-      analysis = await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content }], 1500, 'checkin');
+      analysis = await callAI(env, trainerBase(env) + ctx, [{ role: 'user', content }], 1500, 'checkin');
       analysis = analysis.replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
-      await env.DB.prepare('UPDATE checkins SET analysis=? WHERE id=?').bind(analysis, id).run();
-      await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', `📸 Check-in ${date}\n\n${analysis}`, now()).run();
+      await env.DB.prepare('UPDATE checkins SET analysis=? WHERE id=? AND uid=?').bind(analysis, id, env.UID).run();
+      await env.DB.prepare('INSERT INTO chat (uid,role,content,created) VALUES (?,?,?,?)').bind(env.UID, 'assistant', `📸 Check-in ${date}\n\n${analysis}`, now()).run();
     } catch (e) { error = String(e.message || e); }
   }
   return json(req, { id, photos, analysis, error });
@@ -350,7 +371,7 @@ async function sendPush(env, sub, data) {
 
 const pragueDate = (d = new Date()) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
 async function pushAll(env, data) {
-  const subs = (await env.DB.prepare('SELECT endpoint,p256dh,auth FROM push_subs').all()).results;
+  const subs = (await env.DB.prepare('SELECT endpoint,p256dh,auth FROM push_subs WHERE uid=?').bind(env.UID).all()).results;
   const out = [];
   for (const sub of subs) {
     try {
@@ -369,7 +390,7 @@ async function attendanceInfo(env) {
   const profile = await getKV(env, 'profile', {});
   const n = parseInt((String(profile.dni_tydne || '').match(/\d+/) || [])[0]) || 3;
   const allowed = Math.ceil(7 / n);
-  const last = await env.DB.prepare('SELECT date FROM workouts ORDER BY date DESC LIMIT 1').first();
+  const last = await env.DB.prepare('SELECT date FROM workouts WHERE uid=? ORDER BY date DESC LIMIT 1').bind(env.UID).first();
   if (!last) return { level: 'none', n };
   const gap = Math.round((new Date(pragueDate()) - new Date(last.date)) / 864e5);
   return { gap, n, allowed, level: gap <= allowed ? 'ok' : gap <= allowed + 2 ? 'sad' : 'angry' };
@@ -399,7 +420,7 @@ async function morningPing(env) {
 async function nextPlanDay(env) {
   const plan = await latestPlan(env);
   if (!plan?.days?.length) return null;
-  const last = await env.DB.prepare('SELECT day_name FROM workouts ORDER BY date DESC, id DESC LIMIT 1').first();
+  const last = await env.DB.prepare('SELECT day_name FROM workouts WHERE uid=? ORDER BY date DESC, id DESC LIMIT 1').bind(env.UID).first();
   const i = last ? plan.days.findIndex(d => d.name === last.day_name) : -1;
   return plan.days[(i + 1) % plan.days.length];
 }
@@ -416,9 +437,9 @@ Napiš krátký ranní briefing (max ~170 slov, bez Markdown nadpisů, tykej, Br
 2) návrhy jídel na dnešek seřazené podle času (snídaně${slot === 'volno' ? ', oběd, večeře' : ', jídlo před tréninkem, po tréninku, večeře'}) – konkrétní běžná jídla z české kuchyně/obchodu, s přibližnou bílkovinou v g, sladěné s cílem z profilu; před tréninkem lehčí a stravitelnější, čím blíž tréninku, tím menší porce (obecná praxe),
 3) kdy si vzít suplementy, které používá.
 Odborná tvrzení (dávky bílkovin, kreatin, načasování) jen ze znalostní báze s citací [K#]. U kreatinu: báze nestanovuje ideální čas vůči tréninku – důležité je brát ho denně. Nevymýšlej čísla mimo bázi a nic nediagnostikuj.`;
-  rec.text = (await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: ask }], 900, 'morning')).replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
+  rec.text = (await callAI(env, trainerBase(env) + ctx, [{ role: 'user', content: ask }], 900, 'morning')).replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
   await setKV(env, 'morning', rec);
-  await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', `☀️ Ranní briefing – gym ${when}\n\n${rec.text}`, now()).run();
+  await env.DB.prepare('INSERT INTO chat (uid,role,content,created) VALUES (?,?,?,?)').bind(env.UID, 'assistant', `☀️ Ranní briefing – gym ${when}\n\n${rec.text}`, now()).run();
   return rec;
 }
 const e1rm = (kg, reps) => (+kg || 0) * (1 + (+reps || 0) / 30);
@@ -426,7 +447,7 @@ async function weeklySummary(env, push = true) {
   const today = pragueDate();
   const from = new Date(today); from.setDate(from.getDate() - 6);
   const fromS = from.toISOString().slice(0, 10);
-  const all = (await env.DB.prepare('SELECT date,day_name,data,note,supps FROM workouts ORDER BY date ASC').all()).results.map(w => ({ ...w, data: JSON.parse(w.data || '[]'), supps: JSON.parse(w.supps || '[]') }));
+  const all = (await env.DB.prepare('SELECT date,day_name,data,note,supps FROM workouts WHERE uid=? ORDER BY date ASC').bind(env.UID).all()).results.map(w => ({ ...w, data: JSON.parse(w.data || '[]'), supps: JSON.parse(w.supps || '[]') }));
   const week = all.filter(w => w.date >= fromS), before = all.filter(w => w.date < fromS);
   const bestBefore = {};
   for (const w of before) for (const e of w.data) for (const s of e.sets) if (s.reps) bestBefore[exKey(e.name)] = Math.max(bestBefore[exKey(e.name)] || 0, e1rm(s.kg, s.reps));
@@ -439,7 +460,7 @@ async function weeklySummary(env, push = true) {
     if (s.reps && bestBefore[ek] && v > bestBefore[ek] + .01 && (!perEx[ek] || v > perEx[ek].v)) perEx[ek] = { v, kg: s.kg, reps: s.reps, name: canonEx(e.name) };
   }
   for (const [, x] of Object.entries(perEx)) prs.push(`${x.name} ${x.kg}×${x.reps} (e1RM ${x.v.toFixed(1)} kg)`);
-  const ck = (await env.DB.prepare('SELECT date,weight,waist FROM checkins WHERE weight IS NOT NULL ORDER BY date DESC LIMIT 2').all()).results;
+  const ck = (await env.DB.prepare('SELECT date,weight,waist FROM checkins WHERE weight IS NOT NULL AND uid=? ORDER BY date DESC LIMIT 2').bind(env.UID).all()).results;
   const profile = await getKV(env, 'profile', {});
   const n = parseInt((String(profile.dni_tydne || '').match(/\d+/) || [])[0]) || 3;
   const stats = `Období ${fromS} až ${today}. Tréninků: ${week.length} (cíl ${n}). Sérií: ${sets}. Objem: ${Math.round(vol)} kg.
@@ -449,9 +470,9 @@ Váha: ${ck.length ? ck.map(c => `${c.date} ${c.weight} kg${c.waist ? ', pas ' +
 Poznámky z tréninků: ${week.map(w => w.note).filter(Boolean).join(' | ') || '-'}.
 Suplementy (zaškrtnuté u tréninků): ${(() => { const c = {}; week.forEach(w => w.supps.forEach(x => c[x] = (c[x] || 0) + 1)); return Object.entries(c).map(([k, v]) => `${k} ${v}/${week.length}`).join(', ') || 'nic nezaškrtnuto'; })()}.`;
   const { ctx } = await buildContext(env);
-  const text = (await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: `Napiš týdenní souhrn (max ~150 slov, bez Markdown nadpisů): 1) jak dopadl týden vs. cíl, 2) rekordy a pokrok, 3) jedna až dvě konkrétní úpravy na příští týden. Použij jen tato data, nic si nevymýšlej:\n${stats}` }], 900, 'summary'))
+  const text = (await callAI(env, trainerBase(env) + ctx, [{ role: 'user', content: `Napiš týdenní souhrn (max ~150 slov, bez Markdown nadpisů): 1) jak dopadl týden vs. cíl, 2) rekordy a pokrok, 3) jedna až dvě konkrétní úpravy na příští týden. Použij jen tato data, nic si nevymýšlej:\n${stats}` }], 900, 'summary'))
     .replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
-  await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', `🗓️ Týdenní souhrn (${fromS.slice(5).split('-').reverse().join('.')}–${today.slice(5).split('-').reverse().join('.')})\n\n${text}`, now()).run();
+  await env.DB.prepare('INSERT INTO chat (uid,role,content,created) VALUES (?,?,?,?)').bind(env.UID, 'assistant', `🗓️ Týdenní souhrn (${fromS.slice(5).split('-').reverse().join('.')}–${today.slice(5).split('-').reverse().join('.')})\n\n${text}`, now()).run();
   await setKV(env, 'last_summary', { date: today, text });
   let sent = null;
   if (push) sent = await pushAll(env, { title: `Týdenní souhrn: ${week.length}/${n} tréninků${prs.length ? ', ' + prs.length + '× rekord' : ''}`, body: text.slice(0, 140), tag: 'summary', url: './' });
@@ -460,7 +481,7 @@ Suplementy (zaškrtnuté u tréninků): ${(() => { const c = {}; week.forEach(w 
 
 async function updateMemory(env) {
   const old = await getKV(env, 'memory', '');
-  const hist = (await env.DB.prepare('SELECT role,content FROM chat ORDER BY id DESC LIMIT 16').all()).results.reverse();
+  const hist = (await env.DB.prepare('SELECT role,content FROM chat WHERE uid=? ORDER BY id DESC LIMIT 16').bind(env.UID).all()).results.reverse();
   const convo = hist.map(m => (m.role === 'user' ? 'Uživatel: ' : 'Trenér: ') + m.content.slice(0, 800)).join('\n');
   const prompt = `Aktualizuj dlouhodobou paměť trenéra o uživateli. Současná paměť:\n${old || '(prázdná)'}\n\nNová konverzace:\n${convo}\n\nVrať POUZE aktualizovaný seznam odrážek (max 15, každá max ~20 slov) s trvalými fakty: cíle, dohody o plánu, preference a cviky, které nechce, omezení/zranění (jen co uživatel řekl), rozvrh a vybavení, důležité milníky. Nic si nedomýšlej, zastaralé informace přepiš, nepiš dočasné věci. Bez úvodu a závěru.`;
   const txt = (await callAI(env, 'Jsi pečlivý zapisovatel. Píšeš česky, stručně, jen fakta z konverzace.', [{ role: 'user', content: prompt }], 700, 'memory')).trim();
@@ -468,22 +489,22 @@ async function updateMemory(env) {
   return txt;
 }
 async function exportAll(env) {
-  const q = async sql => (await env.DB.prepare(sql).all()).results;
+  const q = async sql => (await env.DB.prepare(sql).bind(env.UID).all()).results;
   return {
-    app: 'fitko-robutek', exported: now(), version: 1,
+    app: 'fitko-robutek', exported: now(), version: 1, user: env.USER?.name || null,
     profile: await getKV(env, 'profile', {}), memory: await getKV(env, 'memory', ''),
-    plans: (await q('SELECT id,data,created FROM plans ORDER BY id')).map(r => ({ ...r, data: JSON.parse(r.data) })),
-    workouts: (await q('SELECT id,date,day_name,data,note,supps,created FROM workouts ORDER BY date,id')).map(r => ({ ...r, data: JSON.parse(r.data || '[]'), supps: JSON.parse(r.supps || '[]') })),
-    checkins: (await q('SELECT id,date,weight,waist,note,photos,analysis,created FROM checkins ORDER BY date,id')).map(r => ({ ...r, photos: JSON.parse(r.photos || '{}') })),
-    chat: await q('SELECT role,content,created FROM chat ORDER BY id'),
-    usage: await q('SELECT day,kind,model,SUM(input) input,SUM(output) output,COUNT(*) calls FROM usage GROUP BY day,kind,model ORDER BY day'),
+    plans: (await q('SELECT id,data,created FROM plans WHERE uid=? ORDER BY id')).map(r => ({ ...r, data: JSON.parse(r.data) })),
+    workouts: (await q('SELECT id,date,day_name,data,note,supps,created FROM workouts WHERE uid=? ORDER BY date,id')).map(r => ({ ...r, data: JSON.parse(r.data || '[]'), supps: JSON.parse(r.supps || '[]') })),
+    checkins: (await q('SELECT id,date,weight,waist,note,photos,analysis,created FROM checkins WHERE uid=? ORDER BY date,id')).map(r => ({ ...r, photos: JSON.parse(r.photos || '{}') })),
+    chat: await q('SELECT role,content,created FROM chat WHERE uid=? ORDER BY id'),
+    usage: await q('SELECT day,kind,model,SUM(input) input,SUM(output) output,COUNT(*) calls FROM usage WHERE uid=? GROUP BY day,kind,model ORDER BY day'),
   };
 }
 async function autoBackup(env) {
   const data = await exportAll(env);
-  const key = 'backup/' + new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }) + '.json';
+  const key = pfx(env) + 'backup/' + new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }) + '.json';
   await env.PHOTOS.put(key, JSON.stringify(data), { metadata: { ct: 'application/json' } });
-  const list = await env.PHOTOS.list({ prefix: 'backup/' });
+  const list = await env.PHOTOS.list({ prefix: pfx(env) + 'backup/' });
   const keys = list.keys.map(k => k.name).sort();
   for (const k of keys.slice(0, Math.max(0, keys.length - 8))) await env.PHOTOS.delete(k);
   return key;
@@ -493,14 +514,16 @@ async function usageReport(env) {
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
   const month = today.slice(0, 7);
   const since = new Date(today); since.setDate(since.getDate() - 29); const sinceS = since.toISOString().slice(0, 10);
-  const rows = (await env.DB.prepare('SELECT day,kind,model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw,COUNT(*) n FROM usage WHERE day>=? OR day LIKE ? GROUP BY day,kind,model').bind(sinceS, month + '%').all()).results;
+  const rows = (await env.DB.prepare('SELECT day,kind,model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw,COUNT(*) n FROM usage WHERE uid=? AND (day>=? OR day LIKE ?) GROUP BY day,kind,model').bind(env.UID, sinceS, month + '%').all()).results;
   const agg = f => rows.filter(f).reduce((a, r) => ({ calls: a.calls + r.n, input: a.input + r.i, output: a.output + r.o, usd: a.usd + usdOf(r.model, r.i, r.o, r.cr, r.cw) }), { calls: 0, input: 0, output: 0, usd: 0 });
   const days = []; for (let i = 0; i < 30; i++) { const d = new Date(sinceS); d.setDate(d.getDate() + i); const k = d.toISOString().slice(0, 10); days.push({ day: k, ...agg(r => r.day === k) }); }
   const kinds = ['chat', 'checkin', 'swap', 'summary', 'memory', 'morning'].map(k => ({ kind: k, ...agg(r => r.day.startsWith(month) && r.kind === k) }));
-  const all = await env.DB.prepare('SELECT SUM(input) i,SUM(output) o,COUNT(*) n,MIN(day) first FROM usage').first();
+  const all = await env.DB.prepare('SELECT SUM(input) i,SUM(output) o,COUNT(*) n,MIN(day) first FROM usage WHERE uid=?').bind(env.UID).first();
   const mt = agg(r => r.day.startsWith(month));
   const dim = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate(), dom = +today.slice(8, 10);
-  return { prices: PRICES[MODEL], model: MODEL, today: agg(r => r.day === today), month: mt, forecast: mt.usd / dom * dim, days, kinds, total: { calls: all?.n || 0, since: all?.first || null }, budget: await getKV(env, 'budget_usd') };
+  let users = null;
+  if (env.USER?.admin) { const ur = (await env.DB.prepare('SELECT uid,model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw,COUNT(*) n FROM usage WHERE day LIKE ? GROUP BY uid,model').bind(month + '%').all()).results; users = (await allUsers(env)).map(u => ({ uid: u.uid, name: u.name, usd: ur.filter(r => r.uid === u.uid).reduce((a, r) => a + usdOf(r.model, r.i, r.o, r.cr, r.cw), 0), calls: ur.filter(r => r.uid === u.uid).reduce((a, r) => a + r.n, 0) })); }
+  return { users, prices: PRICES[MODEL], model: MODEL, today: agg(r => r.day === today), month: mt, forecast: mt.usd / dom * dim, days, kinds, total: { calls: all?.n || 0, since: all?.first || null }, budget: await getKV(env, 'budget_usd') };
 }
 
 async function handleSwap(req, env) {
@@ -512,7 +535,7 @@ Důvod: ${reason || 'neuveden'}.
 Ostatní cviky v tomto tréninku: ${(current || []).filter(n => n !== exercise.name).join(', ') || '-'}.
 Navrhni 3 náhrady do plně vybavené posilovny, které cílí na stejné svaly/pohybový vzor, respektují důvod (bolest → šetrnější varianta, obsazený stroj → jiné vybavení) a neduplikují ostatní cviky.
 Odpověz POUZE JSON polem bez dalšího textu: [{"name":"...","sets":3,"reps":"8-10","rest":"2 min","note":"krátký tip k technice","why":"proč je to vhodná náhrada (1 věta)"}]`;
-  const txt = await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: prompt }], 1000, 'swap');
+  const txt = await callAI(env, trainerBase(env) + ctx, [{ role: 'user', content: prompt }], 1000, 'swap');
   const mm = txt.match(/\[[\s\S]*\]/);
   let options = [];
   try { options = JSON.parse(mm ? mm[0] : txt); } catch { return json(req, { error: 'AI vrátila neplatný formát', raw: txt.slice(0, 300) }, 502); }
@@ -523,9 +546,18 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
       await ensureSchema(env);
-      if (event.cron === '0 6 * * *') await morningPing(env);
-      else if (/SUN|\* 1$|\* 7$/.test(event.cron) && !/\* \* \* \*$/.test(event.cron)) { await weeklySummary(env, true); await autoBackup(env); }
-      else await dailyNag(env);
+      for (const u of await allUsers(env)) {
+        const ue = asUser(env, u);
+        try {
+          if (event.cron === '0 6 * * *') await morningPing(ue);
+          else if (/SUN|\* 1$|\* 7$/.test(event.cron) && !/\* \* \* \*$/.test(event.cron)) {
+            const hasData = await env.DB.prepare('SELECT 1 FROM workouts WHERE uid=? UNION SELECT 1 FROM chat WHERE uid=? LIMIT 1').bind(u.uid, u.uid).first();
+            if (hasData) await weeklySummary(ue, true);
+            await autoBackup(ue);
+          }
+          else await dailyNag(ue);
+        } catch (e) {}
+      }
     })());
   },
   async fetch(req, env) {
@@ -533,22 +565,24 @@ export default {
     const url = new URL(req.url);
     const p = url.pathname.replace(/\/+$/, '') || '/';
     if (p === '/' || p === '/health') return json(req, { ok: true, app: 'fitko-robutek' });
-    if (!authed(req, env)) return json(req, { error: 'unauthorized' }, 401);
     try {
       await ensureSchema(env);
+      const user = await authUser(req, env);
+      if (!user) return json(req, { error: 'unauthorized' }, 401);
+      env = asUser(env, user);
       if (p === '/state' && req.method === 'GET') {
         const profile = await getKV(env, 'profile', {});
         const plan = await latestPlan(env);
-        const checkins = (await env.DB.prepare('SELECT id,date,weight,waist,note,photos,analysis FROM checkins ORDER BY date DESC, id DESC LIMIT 50').all()).results
+        const checkins = (await env.DB.prepare('SELECT id,date,weight,waist,note,photos,analysis FROM checkins WHERE uid=? ORDER BY date DESC, id DESC LIMIT 50').bind(env.UID).all()).results
           .map(c => ({ ...c, photos: JSON.parse(c.photos || '{}') }));
-        const workouts = (await env.DB.prepare('SELECT id,date,day_name,data,note,supps FROM workouts ORDER BY date DESC, id DESC LIMIT 60').all()).results
+        const workouts = (await env.DB.prepare('SELECT id,date,day_name,data,note,supps FROM workouts WHERE uid=? ORDER BY date DESC, id DESC LIMIT 60').bind(env.UID).all()).results
           .map(w => ({ ...w, data: JSON.parse(w.data || '[]'), supps: JSON.parse(w.supps || '[]') }));
-        const chat = (await env.DB.prepare('SELECT id,role,content,created FROM chat ORDER BY id DESC LIMIT 80').all()).results.reverse();
-        const mu = await env.DB.prepare('SELECT model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw FROM usage WHERE day LIKE ? GROUP BY model').bind(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }).slice(0, 7) + '%').all();
+        const chat = (await env.DB.prepare('SELECT id,role,content,created FROM chat WHERE uid=? ORDER BY id DESC LIMIT 80').bind(env.UID).all()).results.reverse();
+        const mu = await env.DB.prepare('SELECT model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw FROM usage WHERE uid=? AND day LIKE ? GROUP BY model').bind(env.UID, new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }).slice(0, 7) + '%').all();
         const usage = { monthUsd: mu.results.reduce((a, r) => a + usdOf(r.model, r.i, r.o, r.cr, r.cw), 0), budget: await getKV(env, 'budget_usd') };
         const mo = await getKV(env, 'morning');
         const morning = { today: mo && mo.date === pragueDate() ? mo : null, on: (await getKV(env, 'morning_on', true)) !== false, date: pragueDate() };
-        return json(req, { profile, plan, checkins, workouts, chat, usage, morning });
+        return json(req, { me: { uid: user.uid, name: user.name, admin: user.admin }, profile, plan, checkins, workouts, chat, usage, morning });
       }
       if (p === '/profile' && req.method === 'PUT') {
         const body = await req.json();
@@ -557,7 +591,7 @@ export default {
       }
       if (p === '/chat' && req.method === 'POST') return await handleChat(req, env);
       if (p === '/chat' && req.method === 'DELETE') {
-        await env.DB.prepare('DELETE FROM chat').run();
+        await env.DB.prepare('DELETE FROM chat WHERE uid=?').bind(env.UID).run();
         return json(req, { ok: true });
       }
       if (p === '/checkin' && req.method === 'POST') return await handleCheckin(req, env);
@@ -565,13 +599,13 @@ export default {
       if (p === '/push/subscribe' && req.method === 'POST') {
         const { subscription: sb } = await req.json();
         if (!sb?.endpoint || !sb?.keys?.p256dh || !sb?.keys?.auth) return json(req, { error: 'bad subscription' }, 400);
-        await env.DB.prepare('INSERT INTO push_subs (endpoint,p256dh,auth,created) VALUES (?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth')
-          .bind(sb.endpoint, sb.keys.p256dh, sb.keys.auth, now()).run();
+        await env.DB.prepare('INSERT INTO push_subs (uid,endpoint,p256dh,auth,created) VALUES (?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth, uid=excluded.uid')
+          .bind(env.UID, sb.endpoint, sb.keys.p256dh, sb.keys.auth, now()).run();
         return json(req, { ok: true });
       }
       if (p === '/push/unsubscribe' && req.method === 'POST') {
         const { endpoint } = await req.json();
-        await env.DB.prepare('DELETE FROM push_subs WHERE endpoint=?').bind(endpoint || '').run();
+        await env.DB.prepare('DELETE FROM push_subs WHERE endpoint=? AND uid=?').bind(endpoint || '', env.UID).run();
         return json(req, { ok: true });
       }
       if (p === '/push/test' && req.method === 'POST') {
@@ -586,26 +620,28 @@ export default {
       if (p === '/morning/settings' && req.method === 'PUT') { const { on } = await req.json(); await setKV(env, 'morning_on', !!on); return json(req, { ok: true }); }
       if (p === '/morning/ping' && req.method === 'POST') { await setKV(env, 'morning', null); return json(req, await morningPing(env)); }
       if (p === '/export' && req.method === 'GET') return json(req, await exportAll(env));
-      if (p === '/backups' && req.method === 'GET') { const l = await env.PHOTOS.list({ prefix: 'backup/' }); return json(req, { backups: l.keys.map(k => k.name).sort().reverse() }); }
+      if (p === '/backups' && req.method === 'GET') { const l = await env.PHOTOS.list({ prefix: pfx(env) + 'backup/' }); return json(req, { backups: l.keys.map(k => k.name.slice(pfx(env).length)).sort().reverse() }); }
       if (p === '/backup/now' && req.method === 'POST') return json(req, { key: await autoBackup(env) });
-      if (p.startsWith('/backup/') && req.method === 'GET') { const { value } = await env.PHOTOS.getWithMetadata('backup/' + decodeURIComponent(p.slice(8)), 'text'); return value ? new Response(value, { headers: { 'Content-Type': 'application/json', ...cors(req) } }) : json(req, { error: 'not found' }, 404); }
+      if (p.startsWith('/backup/') && req.method === 'GET') { const { value } = await env.PHOTOS.getWithMetadata(pfx(env) + 'backup/' + decodeURIComponent(p.slice(8)).replace(/\.\.|\//g, ''), 'text'); return value ? new Response(value, { headers: { 'Content-Type': 'application/json', ...cors(req) } }) : json(req, { error: 'not found' }, 404); }
       if (p === '/memory' && req.method === 'GET') return json(req, { memory: await getKV(env, 'memory', ''), route: env.ANTHROPIC_API_KEY ? 'own-key' : 'robutek' });
       if (p === '/memory' && req.method === 'PUT') { const { memory } = await req.json(); await setKV(env, 'memory', String(memory || '').slice(0, 3000)); return json(req, { ok: true }); }
       if (p === '/memory/refresh' && req.method === 'POST') return json(req, { memory: await updateMemory(env) });
       if (p === '/kb' && req.method === 'GET') return json(req, { sources: KB_SOURCES, items: KB });
       if (p === '/usage' && req.method === 'GET') return json(req, await usageReport(env));
+      if (p === '/usage/budget' && req.method === 'PUT' && !user.admin) return json(req, { error: 'Limit ti nastavuje majitel appky.' }, 403);
       if (p === '/usage/budget' && req.method === 'PUT') { const { usd } = await req.json(); await setKV(env, 'budget_usd', usd ? +usd : null); return json(req, { ok: true }); }
       if (p === '/push/nag' && req.method === 'POST') return json(req, await dailyNag(env, true));
       if (p === '/summary' && req.method === 'POST') { const r = await weeklySummary(env, false); return json(req, { text: r.text }); }
       let m;
       if ((m = p.match(/^\/checkin\/(\d+)$/)) && req.method === 'DELETE') {
-        const c = await env.DB.prepare('SELECT photos FROM checkins WHERE id=?').bind(+m[1]).first();
+        const c = await env.DB.prepare('SELECT photos FROM checkins WHERE id=? AND uid=?').bind(+m[1], env.UID).first();
         if (c) for (const k of Object.values(JSON.parse(c.photos || '{}'))) await env.PHOTOS.delete(k);
-        await env.DB.prepare('DELETE FROM checkins WHERE id=?').bind(+m[1]).run();
+        await env.DB.prepare('DELETE FROM checkins WHERE id=? AND uid=?').bind(+m[1], env.UID).run();
         return json(req, { ok: true });
       }
       if (p.startsWith('/photo/') && req.method === 'GET') {
         const key = decodeURIComponent(p.slice(7));
+        if (!(env.UID === 1 ? key.startsWith('checkins/') : key.startsWith(pfx(env) + 'checkins/')) || key.includes('..')) return json(req, { error: 'forbidden' }, 403);
         const { value, metadata } = await env.PHOTOS.getWithMetadata(key, 'arrayBuffer');
         if (!value) return json(req, { error: 'not found' }, 404);
         return new Response(value, { headers: { 'Content-Type': metadata?.ct || 'image/jpeg', 'Cache-Control': 'private, max-age=86400', ...cors(req) } });
@@ -613,17 +649,43 @@ export default {
       if (p === '/workout' && req.method === 'POST') {
         const w = await req.json();
         (w.exercises || []).forEach(e => { e.name = canonEx(e.name); });
-        const r = await env.DB.prepare('INSERT INTO workouts (date,day_name,data,note,supps,created) VALUES (?,?,?,?,?,?) RETURNING id')
-          .bind(w.date || now().slice(0, 10), w.day_name || '', JSON.stringify(w.exercises || []), w.note || '', JSON.stringify((Array.isArray(w.supps) ? w.supps : []).map(x => String(x).slice(0, 40)).slice(0, 12)), now()).first();
+        const r = await env.DB.prepare('INSERT INTO workouts (uid,date,day_name,data,note,supps,created) VALUES (?,?,?,?,?,?,?) RETURNING id')
+          .bind(env.UID, w.date || now().slice(0, 10), w.day_name || '', JSON.stringify(w.exercises || []), w.note || '', JSON.stringify((Array.isArray(w.supps) ? w.supps : []).map(x => String(x).slice(0, 40)).slice(0, 12)), now()).first();
         return json(req, { id: r.id });
       }
       if ((m = p.match(/^\/workout\/(\d+)$/)) && req.method === 'DELETE') {
-        await env.DB.prepare('DELETE FROM workouts WHERE id=?').bind(+m[1]).run();
+        await env.DB.prepare('DELETE FROM workouts WHERE id=? AND uid=?').bind(+m[1], env.UID).run();
         return json(req, { ok: true });
+      }
+      if (p.startsWith('/users')) {
+        if (!user.admin) return json(req, { error: 'forbidden' }, 403);
+        if (p === '/users' && req.method === 'GET') { const us = await allUsers(env); for (const u of us) { const ue = asUser(env, u); u.budget = u.uid === 1 ? null : await getKV(ue, 'budget_usd'); u.monthUsd = await monthUsd(ue); } return json(req, { users: us }); }
+        if (p === '/users' && req.method === 'POST') {
+          const name = String((await req.json()).name || '').trim().slice(0, 40);
+          if (!name) return json(req, { error: 'chybí jméno' }, 400);
+          const pass = genPass(), salt = genPass();
+          const mx = await env.DB.prepare('SELECT MAX(id) m FROM users').first();
+          const r = await env.DB.prepare('INSERT INTO users (id,name,salt,hash,created) VALUES (?,?,?,?,?) RETURNING id').bind(Math.max(1, mx?.m || 0) + 1, name, salt, await sha256hex(salt + ':' + pass), now()).first(); // id >= 2 (1 = majitel)
+          return json(req, { uid: r.id, name, password: pass });
+        }
+        if ((m = p.match(/^\/users\/(\d+)\/budget$/)) && req.method === 'PUT') {
+          const { usd } = await req.json(); await setKV(asUser(env, { uid: +m[1] }), 'budget_usd', usd ? +usd : null); return json(req, { ok: true });
+        }
+        if ((m = p.match(/^\/users\/(\d+)\/reset$/)) && req.method === 'POST') {
+          const pass = genPass(), salt = genPass();
+          const r = await env.DB.prepare('UPDATE users SET salt=?, hash=? WHERE id=?').bind(salt, await sha256hex(salt + ':' + pass), +m[1]).run();
+          return r.meta?.changes ? json(req, { password: pass }) : json(req, { error: 'not found' }, 404);
+        }
+        if ((m = p.match(/^\/users\/(\d+)$/)) && req.method === 'DELETE') {
+          const id = +m[1]; if (id < 2) return json(req, { error: 'majitele nelze smazat' }, 400);
+          await env.DB.batch(['checkins', 'workouts', 'chat', 'plans', 'push_subs', 'usage'].map(t => env.DB.prepare(`DELETE FROM ${t} WHERE uid=?`).bind(id)).concat([env.DB.prepare('DELETE FROM kv WHERE k LIKE ?').bind(`u${id}:%`), env.DB.prepare('DELETE FROM users WHERE id=?').bind(id)]));
+          let cur; do { const l = await env.PHOTOS.list({ prefix: `u${id}/`, cursor: cur }); for (const k of l.keys) await env.PHOTOS.delete(k.name); cur = l.list_complete ? null : l.cursor; } while (cur);
+          return json(req, { ok: true });
+        }
       }
       if (p === '/plan' && req.method === 'PUT') {
         const plan = await req.json();
-        await env.DB.prepare('INSERT INTO plans (data,created) VALUES (?,?)').bind(JSON.stringify(plan), now()).run();
+        await env.DB.prepare('INSERT INTO plans (uid,data,created) VALUES (?,?,?)').bind(env.UID, JSON.stringify(plan), now()).run();
         return json(req, { ok: true });
       }
       return json(req, { error: 'not found' }, 404);

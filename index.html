@@ -120,6 +120,12 @@ th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;lett
 .set input{padding:8px}
 .swap{border-top:1px solid var(--line);margin:6px 0;padding-top:8px}
 .opt{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:6px;font-size:13px}
+.ucard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px;background:var(--card2)}
+.ucard .row{align-items:center}
+.ucard input{margin:0}
+.passbox{margin-top:10px;padding:12px;border-radius:12px;border:1px solid #46c878;background:rgba(70,200,120,.1)}
+.passbox code{display:block;font-size:18px;font-weight:700;letter-spacing:.5px;margin:6px 0;user-select:all;word-break:break-all}
+body.not-admin .own-only{display:none!important}
 .supp{margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--card2)}
 .supp h3{margin:0 0 8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
 .supp .sp{display:flex;flex-wrap:wrap;gap:8px}
@@ -255,7 +261,7 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
 <div id="login" style="display:none">
   <div id="loginMascot"></div>
   <div class="card">
-    <h2>Mattyho fitko robůtek</h2>
+    <h2>Fitko robůtek</h2>
     <label>Heslo</label>
     <input id="pw" type="password" autocomplete="current-password">
     <div style="margin-top:10px"><button id="loginBtn" style="width:100%">Přihlásit</button></div>
@@ -368,14 +374,22 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
       <p class="mut">Bráška smí odborná doporučení stavět jen na těchto ověřených zdrojích a u každého tvrzení ukáže, odkud je. Klepni na modrý štítek v chatu.</p>
       <div id="kbList" style="margin-top:8px"></div>
     </div>
+    <div class="card" id="usersCard" style="display:none">
+      <h2>Profily</h2>
+      <p class="mut">Každý profil má vlastní heslo a úplně oddělená data – fotky, tréninky, chat, plán, paměť i upozornění. AI jde přes tvůj klíč, proto můžeš každému nastavit měsíční limit.</p>
+      <div id="usersList" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:10px"><input id="newUser" placeholder="Jméno (např. Kuba)" maxlength="40"><button id="addUser" style="flex:0 0 auto">+ Přidat profil</button></div>
+      <div id="newUserOut"></div>
+    </div>
     <div class="card" id="usageCard">
       <h2>Čerpání AI</h2>
       <div class="prs" id="usTiles"></div>
       <div id="usBudgetBar" style="margin-top:10px"></div>
       <div id="usChart" style="margin-top:10px"></div>
       <div id="usKinds" style="margin-top:6px"></div>
-      <label>Měsíční rozpočet (USD)</label>
-      <div class="row"><input id="usBudget" type="number" step="0.5" min="0" inputmode="decimal" placeholder="např. 5"><button class="sec" id="usSave" style="flex:0 0 auto">Uložit</button></div>
+      <div id="usPeople"></div>
+      <label class="own-only">Měsíční rozpočet (USD)</label>
+      <div class="row own-only"><input id="usBudget" type="number" step="0.5" min="0" inputmode="decimal" placeholder="např. 5"><button class="sec" id="usSave" style="flex:0 0 auto">Uložit</button></div>
       <p class="mut" style="margin-top:8px" id="usNote"></p>
     </div>
     <div class="card" id="notifCard">
@@ -621,7 +635,7 @@ $('#loginBtn').onclick = async () => {
   catch (e) { if (e.message !== 'unauthorized') $('#loginErr').textContent = 'Chyba: ' + e.message; }
 };
 $('#pw').onkeydown = e => { if (e.key === 'Enter') $('#loginBtn').click(); };
-$('#logout').onclick = () => { try { localStorage.removeItem('fitko_pw'); } catch (e) {} PW = ''; showLogin(); };
+$('#logout').onclick = () => { try { localStorage.removeItem('fitko_pw'); localStorage.removeItem('fitko_state'); } catch (e) {} PW = ''; S = { profile: {}, plan: null, checkins: [], workouts: [], chat: [] }; showLogin(); };
 
 async function load() {
   try { S = await api('/state'); try { localStorage.setItem('fitko_state', JSON.stringify(S)); } catch (e) {} }
@@ -635,7 +649,7 @@ async function load() {
   $('#login').style.display = 'none'; $('#app').style.display = 'block';
   renderAll();
 }
-function renderAll() { if ($('#mornOn')) $('#mornOn').checked = S.morning?.on !== false; budgetCheck(); renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD === 'idle' || MOOD === 'sad' || MOOD === 'angry' ? baseMood() : MOOD); }
+function renderAll() { const adm = S.me?.admin !== false; document.body.classList.toggle('not-admin', !adm); $('#usersCard').style.display = adm && S.me ? 'block' : 'none'; if (adm && S.me && $('#v-prof')?.dataset.active === '1') renderUsers(); if ($('#mornOn')) $('#mornOn').checked = S.morning?.on !== false; budgetCheck(); renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD === 'idle' || MOOD === 'sad' || MOOD === 'angry' ? baseMood() : MOOD); }
 function hdr() {
   const c = S.checkins[0];
   const ws = weekStreak();
@@ -645,7 +659,7 @@ function hdr() {
 /* ---------- nav ---------- */
 $$('nav div').forEach(n => n.onclick = () => go(n.dataset.v));
 function go(v) {
-  if (v === 'prof' && PW && navigator.onLine) { renderUsage(); renderMemBackup(); }
+  if (v === 'prof' && PW && navigator.onLine) { renderUsage(); renderMemBackup(); if (S.me?.admin) renderUsers(); }
   $$('nav div').forEach(n => n.dataset.active = n.dataset.v === v ? '1' : '0');
   $$('.view').forEach(s => s.dataset.active = s.id === 'v-' + v ? '1' : '0');
     document.body.dataset.view = v;
@@ -1034,18 +1048,19 @@ const QK = 'fitko_queue';
 const getQ = () => { try { return JSON.parse(localStorage.getItem(QK) || '[]'); } catch (e) { return []; } };
 const setQ = q => { try { localStorage.setItem(QK, JSON.stringify(q)); } catch (e) {} };
 function queueWorkout(body, ex) {
-  const q = getQ(); const tmp = 'q' + Date.now(); q.push({ tmp, body }); setQ(q);
+  const q = getQ(); const tmp = 'q' + Date.now(); q.push({ tmp, body, pw: PW }); setQ(q);
   S.workouts.unshift({ id: tmp, ...body, data: ex, pending: true });
   try { localStorage.setItem('fitko_state', JSON.stringify(S)); } catch (e) {}
   W = []; $('#wNote').value = ''; SUPP.clear(); renderSupp(); loadDay(); renderLog(); renderCoach();
   toast('Bez signálu – trénink je uložený v telefonu, nahraju ho později.', 4500, 'think');
 }
-function mergeQueue() { const q = getQ(); for (const it of q) if (!S.workouts.some(w => w.id === it.tmp)) S.workouts.unshift({ id: it.tmp, ...it.body, data: it.body.exercises, pending: true }); S.workouts.sort((a, b) => b.date.localeCompare(a.date)); }
+function mergeQueue() { const q = getQ().filter(it => !it.pw || it.pw === PW); for (const it of q) if (!S.workouts.some(w => w.id === it.tmp)) S.workouts.unshift({ id: it.tmp, ...it.body, data: it.body.exercises, pending: true }); S.workouts.sort((a, b) => b.date.localeCompare(a.date)); }
 let flushing = false;
 async function flushQueue() {
   if (flushing || !navigator.onLine || !PW) return; const q = getQ(); if (!q.length) return;
   flushing = true; let done = 0;
   for (const it of q.slice()) {
+    if (it.pw && it.pw !== PW) continue;
     try { const r = await api('/workout', { method: 'POST', body: it.body }); const w = S.workouts.find(x => x.id === it.tmp); if (w) { w.id = r.id; delete w.pending; } setQ(getQ().filter(x => x.tmp !== it.tmp)); done++; }
     catch (e) { break; }
   }
@@ -1136,6 +1151,35 @@ $('#bkNow').onclick = async () => { try { await api('/backup/now', { method: 'PO
 /* ---------- AI usage ---------- */
 const usd = v => '$' + (v < 1 ? v.toFixed(3) : v.toFixed(2));
 const KIND = { chat: 'Chat s trenérem', checkin: 'Analýza fotek', swap: 'Výměna cviku', summary: 'Týdenní souhrny', memory: 'Aktualizace paměti', morning: 'Ranní briefingy' };
+/* ---------- profily (jen majitel) ---------- */
+async function renderUsers() {
+  let r; try { r = await api('/users'); } catch (e) { return; }
+  $('#usersList').innerHTML = r.users.map(u => u.uid === 1 ? `<div class="ucard"><div class="row"><b style="flex:1">👑 ${esc(u.name)} (ty)</b><span class="mut" style="flex:0 0 auto">${usd(u.monthUsd)} tento měsíc</span></div></div>`
+    : `<div class="ucard" data-u="${u.uid}"><div class="row"><b style="flex:1">${esc(u.name)}</b><span class="mut" style="flex:0 0 auto">${usd(u.monthUsd)}${u.budget ? ' / ' + usd(u.budget) : ''}</span></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap"><input type="number" step="0.5" min="0" inputmode="decimal" placeholder="limit USD/měsíc" value="${u.budget || ''}" style="flex:1;min-width:120px"><button class="sec" data-act="budget" style="flex:0 0 auto">Uložit limit</button></div>
+      <div class="row" style="margin-top:6px"><button class="sec" data-act="reset">Nové heslo</button><button class="ghost" data-act="del">Smazat profil</button></div></div>`).join('');
+  $$('#usersList [data-act]').forEach(b => b.onclick = async () => {
+    const card = b.closest('[data-u]'), id = card.dataset.u, name = card.querySelector('b').textContent;
+    try {
+      if (b.dataset.act === 'budget') { const v = card.querySelector('input').value.replace(',', '.'); await api(`/users/${id}/budget`, { method: 'PUT', body: { usd: v ? +v : null } }); toast(v ? `Limit pro ${name}: ${usd(+v)}` : `Limit pro ${name} zrušen`, 2500, 'happy'); renderUsers(); }
+      if (b.dataset.act === 'reset') { if (!confirm(`Vygenerovat pro ${name} nové heslo? Staré přestane fungovat.`)) return; const x = await api(`/users/${id}/reset`, { method: 'POST' }); showPass(name, x.password); }
+      if (b.dataset.act === 'del') { if (!confirm(`Opravdu smazat profil ${name} včetně všech jeho dat (fotky, tréninky, chat)? Nejde to vrátit.`)) return; await api(`/users/${id}`, { method: 'DELETE' }); toast(`Profil ${name} smazán`, 2500); $('#newUserOut').innerHTML = ''; renderUsers(); renderUsage(); }
+    } catch (e) { toast('Chyba: ' + e.message, 3500, 'think'); }
+  });
+}
+function showPass(name, pass) {
+  const url = location.origin + location.pathname.replace(/index\.html$/, '');
+  const msg = `Čau ${name}! Tady máš Fitko – osobního AI trenéra: ${url}\nPřihlas se heslem: ${pass}\nNa mobilu si ho přidej na plochu (Sdílet → Přidat na plochu) a zapni upozornění.`;
+  $('#newUserOut').innerHTML = `<div class="passbox"><b>Heslo pro ${esc(name)}</b> <span class="mut">(ukážu ho jen teď)</span><code>${esc(pass)}</code><div class="row" style="flex-wrap:wrap"><button id="copyInvite">📋 Zkopírovat pozvánku</button>${navigator.share ? '<button class="sec" id="shareInvite">Sdílet…</button>' : ''}</div></div>`;
+  $('#copyInvite').onclick = async () => { try { await navigator.clipboard.writeText(msg); toast('Pozvánka zkopírovaná – pošli ji třeba přes WhatsApp', 3000, 'happy'); } catch (e) { toast('Nepodařilo se zkopírovat, opiš heslo ručně.', 3000, 'think'); } };
+  if ($('#shareInvite')) $('#shareInvite').onclick = () => navigator.share({ title: 'Fitko', text: msg }).catch(() => {});
+}
+$('#addUser').onclick = async () => {
+  const name = $('#newUser').value.trim(); if (!name) return toast('Napiš jméno', 2000, 'think');
+  $('#addUser').disabled = true;
+  try { const r = await api('/users', { method: 'POST', body: { name } }); $('#newUser').value = ''; showPass(r.name, r.password); renderUsers(); } catch (e) { toast('Chyba: ' + e.message, 3500, 'think'); }
+  $('#addUser').disabled = false;
+};
 async function renderUsage() {
   let u; try { u = await api('/usage'); } catch (e) { $('#usNote').textContent = 'Čerpání se nepodařilo načíst.'; return; }
   const m = u.month, b = u.budget;
@@ -1146,7 +1190,9 @@ async function renderUsage() {
   $('#usChart').innerHTML = `<div class="mut" style="margin-bottom:4px">Posledních 30 dní</div><div class="bars">${u.days.map(d => `<i class="${d.usd ? '' : 'z'}" style="height:${d.usd ? Math.max(4, 100 * d.usd / mx) : 2}%" title="${d.day}: ${usd(d.usd)} · ${d.calls}× · ${d.input.toLocaleString('cs-CZ')} in / ${d.output.toLocaleString('cs-CZ')} out tokenů"></i>`).join('')}</div>`;
   $('#usKinds').innerHTML = u.kinds.filter(k => k.calls).map(k => `<div class="kind"><span>${KIND[k.kind] || k.kind} <span class="mut">${k.calls}×</span></span><b>${usd(k.usd)}</b></div>`).join('') || '<p class="mut">Tento měsíc zatím žádné volání AI.</p>';
   $('#usBudget').value = b || '';
-  $('#usNote').innerHTML = `Model ${esc(u.model)}: $${u.prices.input} / mil. vstupních a $${u.prices.output} / mil. výstupních tokenů (ceník Anthropic). Měří se jen Fitko; Robůtek čerpá ze stejného klíče zvlášť. Přesnou fakturaci vidíš v Anthropic Console → Usage.`;
+  const me = S.me || {};
+  $('#usPeople').innerHTML = u.users && u.users.length > 1 ? `<div class="mut" style="margin:8px 0 2px">Tento měsíc podle profilů</div>` + u.users.map(x => `<div class="kind"><span>${esc(x.name)} <span class="mut">${x.calls}×</span></span><b>${usd(x.usd)}</b></div>`).join('') : (me.admin === false ? `<p class="mut" style="margin-top:6px">${b ? `Měsíční limit AI: ${usd(b)}. Když ho vyčerpáš, Bráška do konce měsíce neodpovídá.` : 'Limit AI ti zatím nikdo nenastavil.'}</p>` : '');
+  $('#usNote').innerHTML = `Model ${esc(u.model)}: $${u.prices.input} / mil. vstupních a $${u.prices.output} / mil. výstupních tokenů (ceník Anthropic). ${me.admin === false ? 'Čísla jsou jen za tvůj profil.' : 'Měří se jen Fitko; Robůtek čerpá ze stejného klíče zvlášť. Přesnou fakturaci vidíš v Anthropic Console → Usage.'}`;
 }
 $('#usSave').onclick = async () => { const v = $('#usBudget').value.replace(',', '.'); await api('/usage/budget', { method: 'PUT', body: { usd: v ? +v : null } }); S.usage = { ...(S.usage || {}), budget: v ? +v : null }; toast(v ? `Rozpočet ${usd(+v)} uložen` : 'Rozpočet zrušen', 2500, 'happy'); renderUsage(); };
 let budgetWarned = false;
