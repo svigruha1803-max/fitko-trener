@@ -120,6 +120,15 @@ th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;lett
 .set input{padding:8px}
 .swap{border-top:1px solid var(--line);margin:6px 0;padding-top:8px}
 .opt{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:6px;font-size:13px}
+.supp{margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--card2)}
+.supp h3{margin:0 0 8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.supp .sp{display:flex;flex-wrap:wrap;gap:8px}
+.supp .sb{flex:1 1 auto;min-width:110px;margin:0;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);color:var(--tx);box-shadow:none;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s}
+.supp .sb.on{background:rgba(70,200,120,.16);border-color:#46c878;color:#7fe0a5}
+.supp .sb.on::before{content:'✓ '}
+.supp .sadd{display:flex;gap:6px;margin-top:8px}
+.supp .sadd input{flex:1;min-width:0}
+.supptag{display:inline-block;margin-top:4px;font-size:12px;color:#7fe0a5}
 .last{background:linear-gradient(90deg,rgba(255,122,26,.12),transparent),var(--card2);border-left:3px solid var(--acc);border-radius:12px;padding:10px 12px;font-size:13px}
 .hist{border-top:1px solid var(--line);padding:8px 0;font-size:13px}
 .hist:first-child{border-top:0}
@@ -154,6 +163,14 @@ svg text{fill:var(--mut);font-size:10px}
 header .who span.mad{color:var(--err)}
 .streak{display:inline-block;background:linear-gradient(135deg,rgba(255,122,26,.25),rgba(255,77,109,.2));border:1px solid rgba(255,122,26,.4);color:#fff;border-radius:999px;padding:2px 8px;font-weight:700;font-size:12px}
 .nag{display:flex;gap:10px;align-items:center;border-radius:16px;padding:10px 12px;margin-bottom:6px;animation:pop .3s ease}
+.morn{display:flex;gap:10px;align-items:flex-start;border-radius:16px;padding:12px;margin:6px 0;background:linear-gradient(135deg,rgba(255,196,77,.14),rgba(255,122,26,.06));border:1px solid rgba(255,196,77,.4);animation:pop .3s ease}
+.morn .av{width:48px;height:48px;flex:0 0 48px}
+.morn b{display:block;font-size:15px;margin-bottom:2px}
+.morn .slots{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.morn .slots button{flex:1 1 auto;min-width:90px;margin:0;padding:9px 10px;font-size:13px;box-shadow:none}
+.morn .slots button.rest{background:var(--card2);border:1px solid var(--line);color:var(--tx)}
+.morn .tm{display:flex;gap:6px;align-items:center;margin-top:8px;font-size:12px;color:var(--mut)}
+.morn .tm input{width:110px;flex:0 0 auto;margin:0}
 .nag .av{width:48px;height:48px;flex:0 0 48px}
 .nag.sad{background:rgba(127,211,255,.08);border:1px solid rgba(127,211,255,.3)}
 .nag.angry{background:rgba(255,77,109,.10);border:1px solid rgba(255,77,109,.45);animation:pop .3s ease,shake .5s ease .3s 2}
@@ -287,6 +304,7 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
       </div>
       <label>Poznámka (pocit, RPE, bolest…)</label>
       <textarea id="wNote"></textarea>
+      <div class="supp" id="wSupp"></div>
       <div style="margin-top:10px"><button id="wSave" style="width:100%">Uložit trénink</button></div>
     </div>
     <div class="card" id="prCard"><h2>Progres síly</h2><select id="prEx"></select><div id="prChart" style="margin-top:10px"></div><div class="prs" id="prStats"></div><p class="mut" style="margin-top:8px">e1RM = odhad maxima na 1 opakování (Epleyho vzorec: kg × (1 + opak./30)), počítá se z nejlepší série tréninku.</p></div>
@@ -362,7 +380,8 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
     </div>
     <div class="card" id="notifCard">
       <h2>Bráška tě hlídá</h2>
-      <p class="mut" id="notifInfo">Upozornění do telefonu: každý den v 18:00 zkontroluje docházku a když vynecháváš, ozve se. V neděli v 19:00 pošle týdenní souhrn.</p>
+      <p class="mut" id="notifInfo">Upozornění do telefonu: ráno v 7:00 se zeptá, kdy jdeš do gymu, a připraví jídla + suplementy na den. Každý den v 18:00 zkontroluje docházku a když vynecháváš, ozve se (ve dny volna ne). V neděli v 19:00 pošle týdenní souhrn.</p>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--tx);font-size:14px"><input type="checkbox" id="mornOn" style="width:auto;margin:0"> Ranní briefing v 7:00</label>
       <div class="row" style="margin-top:10px;flex-wrap:wrap"><button id="notifOn">Zapnout upozornění</button><button class="sec" id="notifTest">Zkušební</button></div>
       <div class="row" style="margin-top:8px"><button class="sec" id="sumNow">Souhrn týdne teď</button><button class="sec" id="installBtn" style="display:none">Nainstalovat appku</button></div>
       <p class="mut" id="iosHint" style="display:none;margin-top:8px">Na iPhonu: v Safari klepni na Sdílet → <b>Přidat na plochu</b>, otevři Fitko z plochy a pak zapni upozornění.</p>
@@ -616,7 +635,7 @@ async function load() {
   $('#login').style.display = 'none'; $('#app').style.display = 'block';
   renderAll();
 }
-function renderAll() { budgetCheck(); renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD === 'idle' || MOOD === 'sad' || MOOD === 'angry' ? baseMood() : MOOD); }
+function renderAll() { if ($('#mornOn')) $('#mornOn').checked = S.morning?.on !== false; budgetCheck(); renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD === 'idle' || MOOD === 'sad' || MOOD === 'angry' ? baseMood() : MOOD); }
 function hdr() {
   const c = S.checkins[0];
   const ws = weekStreak();
@@ -650,6 +669,7 @@ function renderChat() {
     log.insertAdjacentHTML('afterbegin', `<div class="nag ${a.level}"><div class="av">${mascot(a.level, { head: true })}</div><div style="flex:1"><b>${a.level === 'angry' ? 'Hej! Kde jsi?' : 'Chybíš mi…'}</b><div>${esc(nagLine())}</div></div><button id="nagGo">Jdu cvičit</button></div>`);
     $('#nagGo').onclick = () => go('log');
   }
+  renderMorning();
   const q = ['Navrhni mi plán', 'Jak mám dnes trénovat?', 'Zhodnoť poslední týden', 'Uprav plán podle check-inu'];
   $('#quick').innerHTML = q.map(t => `<span class="pill">${t}</span>`).join('');
   $$('#quick .pill').forEach(p => p.onclick = () => { $('#chatIn').value = p.textContent; sendChat(); });
@@ -669,6 +689,29 @@ async function sendChat() {
     else { const st = await api('/state'); S.profile = st.profile; renderProfile(); }
   } catch (e) { setMood('think', 3000); S.chat.push({ role: 'assistant', content: 'Něco se pokazilo: ' + e.message }); }
   $('#typing').style.display = 'none'; $('#chatSend').disabled = false; renderChat();
+}
+/* ---------- ranní briefing ---------- */
+const SLOT_UI = [['rano', '🌅 Ráno'], ['dopoledne', '☕ Dopoledne'], ['odpoledne', '🌤️ Odpoledne'], ['vecer', '🌙 Večer']];
+function renderMorning() {
+  const m = S.morning; const h = new Date().getHours();
+  if (!m || m.today || h >= 21 || h < 4 || !PW) return;
+  $('#chatLog').insertAdjacentHTML('beforeend', `<div class="morn" id="morn"><div class="av">${mascot('happy', { head: true })}</div><div style="flex:1;min-width:0">
+    <b>${h < 11 ? 'Dobré ráno! ☀️' : 'Čau! 👋'} Kdy jdeš dneska do gymu?</b><span class="mut" style="font-size:13px">Podle toho ti navrhnu jídla na celý den a kdy si dát suplementy.</span>
+    <div class="slots">${SLOT_UI.map(([k, l]) => `<button data-slot="${k}">${l}</button>`).join('')}<button class="rest" data-slot="volno">😴 Dnes volno</button></div>
+    <div class="tm">přesně v <input type="time" id="mornTime"> <span>(nepovinné)</span></div></div></div>`);
+  $$('#morn [data-slot]').forEach(b => b.onclick = () => sendMorning(b.dataset.slot));
+}
+async function sendMorning(slot) {
+  const time = $('#mornTime')?.value || '';
+  $('#morn')?.remove();
+  $('#typAv').innerHTML = mascot('think', { head: true, cls: 'talk' }); $('#typing').style.display = 'flex'; setMood('think'); scrollChat();
+  try {
+    const r = await api('/morning', { method: 'POST', body: { slot, time, supps: suppList() } });
+    S.morning.today = r;
+    const st = await api('/state'); S.chat = st.chat; S.morning = st.morning;
+    setMood('happy', 3500);
+  } catch (e) { toast('Chyba: ' + e.message, 3500, 'think'); setMood(baseMood()); }
+  $('#typing').style.display = 'none'; renderChat(); scrollChat();
 }
 $('#chatSend').onclick = sendChat;
 $('#chatIn').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } };
@@ -749,7 +792,7 @@ function renderLast() {
   const idx = $('#wDay').value;
   const d = S.plan?.days?.[idx];
   const lw = d ? lastDay(d.name) : S.workouts[0];
-  $('#wLast').innerHTML = lw ? `<div class="last"><b>Naposled${d ? ' tento den' : ''}: ${lw.date.split('-').reverse().join('.')}${d ? '' : ' · ' + esc(lw.day_name)}</b>${(lw.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${fmtSets(e.sets)}</span></div>`).join('')}${lw.note ? `<div class="mut">${esc(lw.note)}</div>` : ''}</div>` : '';
+  $('#wLast').innerHTML = lw ? `<div class="last"><b>Naposled${d ? ' tento den' : ''}: ${lw.date.split('-').reverse().join('.')}${d ? '' : ' · ' + esc(lw.day_name)}</b>${(lw.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${fmtSets(e.sets)}</span></div>`).join('')}${lw.note ? `<div class="mut">${esc(lw.note)}</div>` : ''}${suppTag(lw)}</div>` : '';
 }
 function renderEx() {
   $('#wEx').innerHTML = W.map((e, i) => {
@@ -775,23 +818,40 @@ function renderLog() {
   $('#wDay').innerHTML = `<option value="">— vlastní —</option>` + days.map((d, i) => `<option value="${i}">${esc(d.name)}</option>`).join('');
   if (cur !== '' && days[cur]) $('#wDay').value = cur;
   if (!W.length) loadDay(); else { renderLast(); renderEx(); }
-  $('#wHist').innerHTML = S.workouts.map(w => `<div class="hist"><div class="row"><b style="flex:1">${w.date.split('-').reverse().join('.')} ${esc(w.day_name)}${w.pending ? ' <span class="pr-badge" style="background:#ffd38a">čeká na nahrání</span>' : ''}</b><button class="ghost" data-dw="${w.id}">smazat</button></div>${(w.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${fmtSets(e.sets)}</span></div>`).join('')}${w.note ? `<div class="mut">${esc(w.note)}</div>` : ''}</div>`).join('') || '<p class="mut">Zatím nic.</p>';
+  $('#wHist').innerHTML = S.workouts.map(w => `<div class="hist"><div class="row"><b style="flex:1">${w.date.split('-').reverse().join('.')} ${esc(w.day_name)}${w.pending ? ' <span class="pr-badge" style="background:#ffd38a">čeká na nahrání</span>' : ''}</b><button class="ghost" data-dw="${w.id}">smazat</button></div>${(w.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${fmtSets(e.sets)}</span></div>`).join('')}${w.note ? `<div class="mut">${esc(w.note)}</div>` : ''}${suppTag(w)}</div>`).join('') || '<p class="mut">Zatím nic.</p>';
   $$('[data-dw]').forEach(b => b.onclick = async () => { if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'opravdu?'; return; } if (String(b.dataset.dw).startsWith('q')) setQ(getQ().filter(x => x.tmp !== b.dataset.dw)); else await api('/workout/' + b.dataset.dw, { method: 'DELETE' }); S.workouts = S.workouts.filter(w => w.id != b.dataset.dw); renderLog(); });
   renderProgress();
 }
 $('#wDay').onchange = loadDay;
 $('#wAddEx').onclick = () => { const n = $('#wNewEx').value.trim(); if (!n) return; W.push({ name: canonEx(n), sets: [{ kg: '', reps: '' }, { kg: '', reps: '' }, { kg: '', reps: '' }] }); $('#wNewEx').value = ''; renderEx(); };
+/* ---------- suplementové okénko ---------- */
+const SUPP = new Set();
+const SUPP_DEF = ['Protein', 'Kreatin'];
+const suppList = () => { try { const l = JSON.parse(localStorage.getItem('fitko_supps') || 'null'); return Array.isArray(l) && l.length ? l : SUPP_DEF; } catch (e) { return SUPP_DEF; } };
+const SUPP_ICO = { protein: '🥛', kreatin: '⚡' };
+const suppTag = w => (w.supps || []).length ? `<div class="supptag">💊 ${w.supps.map(esc).join(' · ')}</div>` : '';
+function renderSupp(el) {
+  const targets = el ? [el] : [$('#wSupp'), $('#goSupp')].filter(Boolean);
+  for (const t of targets) {
+    t.innerHTML = `<h3>💊 Suplementové okénko <span class="mut" style="font-weight:400">– vzal sis dnes?</span></h3><div class="sp">${suppList().map(n => `<button type="button" class="sb${SUPP.has(n) ? ' on' : ''}" data-sp="${esc(n)}">${SUPP_ICO[exStrip(n)] || '💊'} ${esc(n)}</button>`).join('')}</div>
+      <div class="sadd"><input placeholder="Přidat další (např. omega-3, vitamín D)…" maxlength="30"><button type="button" class="sec" style="flex:0 0 auto">+</button></div>`;
+    t.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => { const n = b.dataset.sp; SUPP.has(n) ? SUPP.delete(n) : SUPP.add(n); if (navigator.vibrate) navigator.vibrate(15); renderSupp(); });
+    const inp = t.querySelector('.sadd input'), add = () => { const n = inp.value.trim(); if (!n) return; const l = suppList(); if (!l.some(x => exStrip(x) === exStrip(n))) { l.push(n); try { localStorage.setItem('fitko_supps', JSON.stringify(l)); } catch (e) {} } SUPP.add(l.find(x => exStrip(x) === exStrip(n)) || n); renderSupp(); };
+    t.querySelector('.sadd button').onclick = add; inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+  }
+}
+renderSupp();
 $('#wSave').onclick = () => saveWorkout();
 async function saveWorkout() {
   const ex = W.map(e => ({ name: canonEx(e.name), sets: e.sets.filter(s => s.done || s.kg !== '' || s.reps !== '').map(s => ({ kg: s.kg === '' ? 0 : +s.kg, reps: s.reps === '' ? null : +s.reps })) }));
-  if (!ex.length && !$('#wNote').value.trim()) return toast('Není co uložit – přidej cvik nebo poznámku.', 3000, 'think');
+  if (!ex.length && !$('#wNote').value.trim() && !SUPP.size) return toast('Není co uložit – přidej cvik, poznámku nebo suplement.', 3000, 'think');
   const idx = $('#wDay').value;
-  const body = { date: $('#wDate').value, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', exercises: ex, note: $('#wNote').value };
+  const body = { date: $('#wDate').value, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', exercises: ex, note: $('#wNote').value, supps: [...SUPP] };
   $('#wSave').disabled = true;
   const prs = findPRs(ex);
   let ok = false;
   if (!navigator.onLine) { queueWorkout(body, ex); $('#wSave').disabled = false; return true; }
-  try { const r = await api('/workout', { method: 'POST', body }); S.workouts.unshift({ id: r.id, ...body, data: ex }); W = []; $('#wNote').value = ''; loadDay(); renderLog(); renderCoach(); ok = true;
+  try { const r = await api('/workout', { method: 'POST', body }); S.workouts.unshift({ id: r.id, ...body, data: ex }); W = []; $('#wNote').value = ''; SUPP.clear(); renderSupp(); loadDay(); renderLog(); renderCoach(); ok = true;
     if (prs.length) { confetti(); setMood('happy', 6000); toast('Nový rekord! ' + prs.map(p => `${p.name} ${p.kg}×${p.reps}`).join(', '), 6000); }
     else { toast('Trénink uložen. Dobrá práce!'); setMood('happy', 4000); } }
   catch (e) { if (e instanceof TypeError) { queueWorkout(body, ex); ok = true; } else toast('Chyba: ' + e.message, 4000, 'think'); }
@@ -934,9 +994,11 @@ function renderGo() {
     $('#goStep').textContent = 'Hotovo';
     $('#goBody').innerHTML = `<div class="gm">${mascot('happy', { cls: 'bounce' })}</div><h2>Trénink dokončen!</h2><p class="mut">${done} sérií, ${W.length} cviků. Ulož to, ať vím, z čeho stavět příště.</p>
       <label style="text-align:left">Poznámka (pocit, RPE, bolest…)</label><textarea id="goNote">${esc($('#wNote').value)}</textarea>
+      <div class="supp" id="goSupp" style="text-align:left"></div>
       <button class="big" id="goSave">Uložit trénink</button><button class="sec" id="goBack" style="width:100%">← Zpět ke cvikům</button>`;
     $('#goSave').onclick = async () => { $('#wNote').value = $('#goNote').value; $('#goSave').disabled = true; if (await saveWorkout()) closeGo(); else $('#goSave').disabled = false; };
     $('#goBack').onclick = () => { G.i = W.length - 1; renderGo(); };
+    renderSupp($('#goSupp'));
     return;
   }
   const e = W[G.i], j = Math.min(doneSets(e), e.sets.length - 1), sg = suggest(e), prev = lastSets(e.name);
@@ -975,7 +1037,7 @@ function queueWorkout(body, ex) {
   const q = getQ(); const tmp = 'q' + Date.now(); q.push({ tmp, body }); setQ(q);
   S.workouts.unshift({ id: tmp, ...body, data: ex, pending: true });
   try { localStorage.setItem('fitko_state', JSON.stringify(S)); } catch (e) {}
-  W = []; $('#wNote').value = ''; loadDay(); renderLog(); renderCoach();
+  W = []; $('#wNote').value = ''; SUPP.clear(); renderSupp(); loadDay(); renderLog(); renderCoach();
   toast('Bez signálu – trénink je uložený v telefonu, nahraju ho později.', 4500, 'think');
 }
 function mergeQueue() { const q = getQ(); for (const it of q) if (!S.workouts.some(w => w.id === it.tmp)) S.workouts.unshift({ id: it.tmp, ...it.body, data: it.body.exercises, pending: true }); S.workouts.sort((a, b) => b.date.localeCompare(a.date)); }
@@ -1008,6 +1070,7 @@ async function updateNotifUI() {
   $('#notifOn').textContent = sub ? 'Upozornění jsou zapnutá ✓' : (Notification.permission === 'denied' ? 'Upozornění zakázána v prohlížeči' : 'Zapnout upozornění');
   $('#notifOn').dataset.on = sub ? '1' : '0';
 }
+$('#mornOn').onchange = async () => { try { await api('/morning/settings', { method: 'PUT', body: { on: $('#mornOn').checked } }); if (S.morning) S.morning.on = $('#mornOn').checked; toast($('#mornOn').checked ? 'Ranní briefing zapnutý' : 'Ranní briefing vypnutý', 2500, 'happy'); } catch (e) { toast('Chyba: ' + e.message, 3000, 'think'); } };
 $('#notifOn').onclick = async () => {
   try {
     if (!swReg) swReg = await navigator.serviceWorker.ready;
@@ -1061,8 +1124,10 @@ $('#bkJson').onclick = async () => { try { const d = await api('/export'); downl
 $('#bkCsv').onclick = async () => {
   try {
     const d = await api('/export'); const q = v => { v = String(v ?? ''); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const rows = [['Datum', 'Den plánu', 'Cvik', 'Série', 'Kg', 'Opakování', 'e1RM (Epley)', 'Poznámka']];
-    for (const w of d.workouts) { if (!(w.data || []).length) rows.push([w.date, w.day_name, '', '', '', '', '', w.note]); for (const e of (w.data || [])) { if (!e.sets.length) rows.push([w.date, w.day_name, canonEx(e.name), '', '', '', '', w.note]); e.sets.forEach((st, i) => rows.push([w.date, w.day_name, canonEx(e.name), i + 1, String(st.kg ?? '').replace('.', ','), st.reps ?? '', st.reps ? (e1rm(st.kg, st.reps)).toFixed(1).replace('.', ',') : '', i === 0 ? w.note : ''])); } }
+    const rows = [['Datum', 'Den plánu', 'Cvik', 'Série', 'Kg', 'Opakování', 'e1RM (Epley)', 'Poznámka', 'Suplementy']];
+    for (const w of d.workouts) { const sp = (w.supps || []).join(', '); let first = true; const f = () => { const r = first; first = false; return r; };
+      if (!(w.data || []).length) rows.push([w.date, w.day_name, '', '', '', '', '', w.note, sp]);
+      for (const e of (w.data || [])) { if (!e.sets.length) { const r = f(); rows.push([w.date, w.day_name, canonEx(e.name), '', '', '', '', r ? w.note : '', r ? sp : '']); } e.sets.forEach(st => { const r = f(); rows.push([w.date, w.day_name, canonEx(e.name), e.sets.indexOf(st) + 1, String(st.kg ?? '').replace('.', ','), st.reps ?? '', st.reps ? (e1rm(st.kg, st.reps)).toFixed(1).replace('.', ',') : '', r ? w.note : '', r ? sp : '']); }); } }
     download(`fitko-treninky-${today()}.csv`, '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   } catch (e) { toast('Chyba: ' + e.message, 3000, 'think'); }
 };
@@ -1070,7 +1135,7 @@ $('#bkNow').onclick = async () => { try { await api('/backup/now', { method: 'PO
 
 /* ---------- AI usage ---------- */
 const usd = v => '$' + (v < 1 ? v.toFixed(3) : v.toFixed(2));
-const KIND = { chat: 'Chat s trenérem', checkin: 'Analýza fotek', swap: 'Výměna cviku', summary: 'Týdenní souhrny', memory: 'Aktualizace paměti' };
+const KIND = { chat: 'Chat s trenérem', checkin: 'Analýza fotek', swap: 'Výměna cviku', summary: 'Týdenní souhrny', memory: 'Aktualizace paměti', morning: 'Ranní briefingy' };
 async function renderUsage() {
   let u; try { u = await api('/usage'); } catch (e) { $('#usNote').textContent = 'Čerpání se nepodařilo načíst.'; return; }
   const m = u.month, b = u.budget;

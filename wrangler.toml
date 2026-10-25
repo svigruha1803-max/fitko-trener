@@ -23,6 +23,6 @@ binding = "AI_SVC"
 service = "plavecky-csps-scraper"
 
 [triggers]
-crons = ["0 17 * * *", "0 18 * * SUN"]
+crons = ["0 6 * * *", "0 17 * * *", "0 18 * * SUN"]
 
 # Secrets (nastavují se v Cloudflare, ne tady): APP_PASSWORD, AI_KEY, VAPID_PRIVATE, volitelně ANTHROPIC_API_KEY

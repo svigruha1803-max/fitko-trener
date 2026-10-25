@@ -57,6 +57,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
+  try { await env.DB.prepare('ALTER TABLE workouts ADD COLUMN supps TEXT').run(); } catch (e) {} // migrace: suplementy
   schemaReady = true;
 }
 
@@ -148,6 +149,8 @@ const KB_SOURCES = {
   S5: { short: 'ISSN 2017', cite: 'Jäger R, et al. International Society of Sports Nutrition Position Stand: protein and exercise. J Int Soc Sports Nutr. 2017;14:20.', url: 'https://doi.org/10.1186/s12970-017-0177-8' },
   S6: { short: 'Schumann 2022', cite: 'Schumann M, Feuerbacher JF, Sünkeler M, Freitag N, Rønnestad BR, Doma K, Lundberg TR. Compatibility of Concurrent Aerobic and Strength Training for Skeletal Muscle Size and Function: An Updated Systematic Review and Meta-Analysis. Sports Med. 2022;52:601–612.', url: 'https://doi.org/10.1007/s40279-021-01587-7' },
   S7: { short: 'Helms 2014', cite: 'Helms ER, Aragon AA, Fitschen PJ. Evidence-based recommendations for natural bodybuilding contest preparation: nutrition and supplementation. J Int Soc Sports Nutr. 2014;11:20.', url: 'https://doi.org/10.1186/1550-2783-11-20' },
+  S8: { short: 'ISSN kreatin 2017', cite: 'Kreider RB, Kalman DS, Antonio J, Ziegenfuss TN, Wildman R, Collins R, Candow DG, Kleiner SM, Almada AL, Lopez HL. International Society of Sports Nutrition position stand: safety and efficacy of creatine supplementation in exercise, sport, and medicine. J Int Soc Sports Nutr. 2017;14.', url: 'https://doi.org/10.1186/s12970-017-0173-z' },
+  S9: { short: 'ISSN timing 2017', cite: 'Kerksick CM, Arent S, Schoenfeld BJ, … Antonio J. International Society of Sports Nutrition position stand: nutrient timing. J Int Soc Sports Nutr. 2017;14.', url: 'https://doi.org/10.1186/s12970-017-0189-4' },
 };
 const KB = [
   { id: 'K1', src: 'S1', t: 'Základ pro zdravé dospělé: trénovat všechny hlavní svalové skupiny aspoň 2× týdně s vysokým úsilím a postupně přidávat zátěž. Největší skok přináší přechod od žádného k jakémukoli silovému tréninku; konzistence je důležitější než dokonalost.' },
@@ -167,10 +170,14 @@ const KB = [
   { id: 'K15', src: 'S5', t: 'ISSN: 1,4–2,0 g bílkovin/kg/den pro většinu cvičících; na porci ~0,25 g/kg nebo 20–40 g, rozložit rovnoměrně zhruba po 3–4 h; při kalorickém deficitu u trénovaných 2,3–3,1 g/kg/den.' },
   { id: 'K16', src: 'S6', t: 'Souběžný vytrvalostní trénink neomezoval hypertrofii ani maximální sílu; mírně tlumil explozivní sílu, a to hlavně když byly obě části v jednom tréninku do 20 min po sobě (při odstupu ≥3 h efekt nebyl).' },
   { id: 'K17', src: 'S7', t: 'Hubnutí se zachováním svalů (doporučení pro přírodní kulturisty): úbytek 0,5–1 % tělesné hmotnosti týdně; bílkoviny 2,3–3,1 g/kg beztukové hmoty, tuky 15–30 % energie, zbytek sacharidy.' },
+  { id: 'K18', src: 'S8', t: 'Kreatin monohydrát je nejúčinnější dostupný výživový doplněk pro výkon ve vysoké intenzitě a nejlépe prozkoumaná forma kreatinu. Nasycení: buď ~0,3 g/kg/den 5–7 dní a pak 3–5 g/den, nebo rovnou 3–5 g/den (svaly se nasytí za 3–4 týdny; počáteční výkonový efekt této cesty je méně podložený).' },
+  { id: 'K19', src: 'S8', t: 'Kreatin: krátkodobé i dlouhodobé užívání (až 30 g/den po 5 let) je u zdravých lidí bezpečné a dobře snášené. Přidání sacharidů nebo sacharidů s bílkovinou může zvýšit jeho vstřebání do svalu, výkon ale nemusí být lepší než se samotným kreatinem.' },
+  { id: 'K20', src: 'S9', t: 'Načasování živin (ISSN): prioritou je splnit celkový denní příjem bílkovin, ideálně rovnoměrně rozložený – 20–40 g kvalitní bílkoviny (0,25–0,40 g/kg) každé 3–4 h. Bílkovina po tréninku (ihned až do 2 h) výrazně zvyšuje syntézu svalových bílkovin; velikost a načasování jídla před tréninkem ovlivňuje, jak naléhavé je jídlo po něm.' },
+  { id: 'K21', src: 'S9', t: 'ISSN: ~30–40 g kaseinu před spaním může akutně zvýšit syntézu svalových bílkovin a metabolismus. Zásoby glykogenu maximalizuje strava s vysokým podílem sacharidů; nejvíc je vyčerpává objemný a intenzivní trénink.' },
 ];
 const KB_PROMPT = `\n\n=== ZNALOSTNÍ BÁZE (jediný povolený zdroj odborných tvrzení) ===\n` +
   KB.map(k => `[${k.id}] (${KB_SOURCES[k.src].short}) ${k.t}`).join('\n') +
-  `\n\nPRAVIDLA CITACÍ: Každé odborné tvrzení (objem, zátěž, opakování, pauzy, frekvence, progrese, bílkoviny, hubnutí, kombinace s vytrvalostí) MUSÍ vycházet ze znalostní báze a mít za sebou značku ve tvaru [K3] (můžeš i [K2][K11]). Nikdy neuváděj čísla ani studie, které v bázi nejsou, a nevymýšlej citace. Pokud k otázce báze nic nemá, napiš výslovně „k tomu nemám ověřený zdroj“ a případnou radu označ jako obecnou trenérskou praxi. Konkrétní volba cviků a jejich pořadí je trenérská praxe – citovat ji nemusíš. Kde se ACSM 2009 a 2026 liší, má přednost 2026.`;
+  `\n\nPRAVIDLA CITACÍ: Každé odborné tvrzení (objem, zátěž, opakování, pauzy, frekvence, progrese, bílkoviny, kreatin, načasování jídla, hubnutí, kombinace s vytrvalostí) MUSÍ vycházet ze znalostní báze a mít za sebou značku ve tvaru [K3] (můžeš i [K2][K11]). Nikdy neuváděj čísla ani studie, které v bázi nejsou, a nevymýšlej citace. Pokud k otázce báze nic nemá, napiš výslovně „k tomu nemám ověřený zdroj“ a případnou radu označ jako obecnou trenérskou praxi. Konkrétní volba cviků a jejich pořadí je trenérská praxe – citovat ji nemusíš. Kde se ACSM 2009 a 2026 liší, má přednost 2026.`;
 
 const TRAINER_BASE = `Jsi "Fitko robůtek" — osobní live fitness trenér Mátyáse (plavecký trenér, chodí do plně vybavené posilovny). Piš česky, stručně, věcně, bez frází a bez emoji. Oslovuj tykáním.
 Principy: progresivní přetížení, dostatečný týdenní objem na partii, technika a regenerace, rozumná frekvence. Když si nejsi jistý, řekni to.
@@ -186,16 +193,17 @@ async function buildContext(env) {
   const profile = await getKV(env, 'profile', {});
   const plan = await latestPlan(env);
   const checkins = (await env.DB.prepare('SELECT date,weight,waist,note,analysis FROM checkins ORDER BY date DESC, id DESC LIMIT 4').all()).results;
-  const workouts = (await env.DB.prepare('SELECT date,day_name,data,note FROM workouts ORDER BY date DESC, id DESC LIMIT 12').all()).results;
+  const workouts = (await env.DB.prepare('SELECT date,day_name,data,note,supps FROM workouts ORDER BY date DESC, id DESC LIMIT 12').all()).results;
   const memory = await getKV(env, 'memory', '');
   let ctx = `\n\n=== PROFIL ===\n${JSON.stringify(profile)}`;
   if (memory) ctx += `\n\n=== DLOUHODOBÁ PAMĚŤ (co víš o uživateli z dřívějších rozhovorů) ===\n${memory}`;
   ctx += `\n\n=== AKTUÁLNÍ PLÁN ===\n${plan ? JSON.stringify({ name: plan.name, goal: plan.goal, days: plan.days, progression: plan.progression }) : 'zatím žádný'}`;
   ctx += `\n\n=== CHECK-INY (nejnovější první) ===\n` + (checkins.length ? checkins.map(c => `${c.date}: váha ${c.weight ?? '-'} kg, pas ${c.waist ?? '-'} cm${c.note ? ', pozn: ' + c.note : ''}${c.analysis ? '\nAnalýza: ' + c.analysis.slice(0, 1200) : ''}`).join('\n\n') : 'žádné');
-  ctx += `\n\n=== POSLEDNÍ TRÉNINKY ===\n` + (workouts.length ? workouts.map(w => `${w.date} ${w.day_name || ''}: ${compactWorkout(w.data)}${w.note ? ' | ' + w.note : ''}`).join('\n') : 'žádné');
+  ctx += `\n\n=== POSLEDNÍ TRÉNINKY ===\n` + (workouts.length ? workouts.map(w => `${w.date} ${w.day_name || ''}: ${compactWorkout(w.data)}${w.note ? ' | ' + w.note : ''}${suppsTxt(w.supps)}`).join('\n') : 'žádné');
   ctx += `\n\nDnešní datum: ${new Date().toLocaleDateString('cs-CZ', { timeZone: 'Europe/Prague' })}`;
   return { ctx, profile };
 }
+const suppsTxt = s => { try { const a = JSON.parse(s || '[]'); return a.length ? ' | suplementy: ' + a.join(', ') : ''; } catch { return ''; } };
 function compactWorkout(data) {
   try {
     return JSON.parse(data).map(e => `${e.name} ${e.sets.filter(s => s.reps).map(s => `${s.kg ?? 0}×${s.reps}`).join(',')}`).join('; ');
@@ -367,6 +375,8 @@ async function attendanceInfo(env) {
   return { gap, n, allowed, level: gap <= allowed ? 'ok' : gap <= allowed + 2 ? 'sad' : 'angry' };
 }
 async function dailyNag(env, force = false) {
+  const mo = await getKV(env, 'morning');
+  if (!force && mo && mo.date === pragueDate() && mo.slot === 'volno') return { skipped: 'rest-day' };
   const a = await attendanceInfo(env);
   if (a.level !== 'sad' && a.level !== 'angry') return { skipped: a.level };
   const today = pragueDate();
@@ -377,12 +387,46 @@ async function dailyNag(env, force = false) {
   await setKV(env, 'last_nag', today);
   return { sent: res, level: a.level };
 }
+/* ---------- ranní briefing ---------- */
+const SLOTS = { rano: 'ráno (do 10:00)', dopoledne: 'dopoledne', odpoledne: 'odpoledne', vecer: 'večer', volno: 'dnes volno' };
+async function morningPing(env) {
+  if ((await getKV(env, 'morning_on', true)) === false) return { skipped: 'off' };
+  const m = await getKV(env, 'morning');
+  if (m && m.date === pragueDate()) return { skipped: 'answered' };
+  const lines = ['Kdy jdeš dneska do gymu? Řekni a já ti poladím jídlo i suplementy.', 'Nový den, nové kila. Kdy dneska makáme?', 'Vstávat, šampione! Kdy dnes vyrážíš do posilovny?'];
+  return { sent: await pushAll(env, { title: 'Dobré ráno! ☀️', body: lines[Math.floor(Math.random() * lines.length)], tag: 'morning', url: './?ranni=1' }) };
+}
+async function nextPlanDay(env) {
+  const plan = await latestPlan(env);
+  if (!plan?.days?.length) return null;
+  const last = await env.DB.prepare('SELECT day_name FROM workouts ORDER BY date DESC, id DESC LIMIT 1').first();
+  const i = last ? plan.days.findIndex(d => d.name === last.day_name) : -1;
+  return plan.days[(i + 1) % plan.days.length];
+}
+async function morningBrief(env, slot, time, supps) {
+  const today = pragueDate();
+  const rec = { date: today, slot, time: time || '', supps, text: '' };
+  const day = slot === 'volno' ? null : await nextPlanDay(env);
+  const { ctx } = await buildContext(env);
+  const when = SLOTS[slot] + (time ? ` (kolem ${time})` : '');
+  const ask = `Ranní briefing na dnešek (${today}). Uživatel jde do posilovny: ${when}.${day ? ` Na řadě je trénink "${day.name}"${day.focus ? ' – ' + day.focus : ''}: ${(day.exercises || []).map(e => e.name).join(', ')}.` : ''}
+Suplementy, které používá: ${supps.length ? supps.join(', ') : 'neuvedl'}.
+Napiš krátký ranní briefing (max ~170 slov, bez Markdown nadpisů, tykej, Bráškův styl – energický, vtipný, ale věcný):
+1) jedna věta pozdrav + ${slot === 'volno' ? 'den volna = regenerace, ať ho využije' : 'co ho dnes čeká'},
+2) návrhy jídel na dnešek seřazené podle času (snídaně${slot === 'volno' ? ', oběd, večeře' : ', jídlo před tréninkem, po tréninku, večeře'}) – konkrétní běžná jídla z české kuchyně/obchodu, s přibližnou bílkovinou v g, sladěné s cílem z profilu; před tréninkem lehčí a stravitelnější, čím blíž tréninku, tím menší porce (obecná praxe),
+3) kdy si vzít suplementy, které používá.
+Odborná tvrzení (dávky bílkovin, kreatin, načasování) jen ze znalostní báze s citací [K#]. U kreatinu: báze nestanovuje ideální čas vůči tréninku – důležité je brát ho denně. Nevymýšlej čísla mimo bázi a nic nediagnostikuj.`;
+  rec.text = (await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: ask }], 900, 'morning')).replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
+  await setKV(env, 'morning', rec);
+  await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', `☀️ Ranní briefing – gym ${when}\n\n${rec.text}`, now()).run();
+  return rec;
+}
 const e1rm = (kg, reps) => (+kg || 0) * (1 + (+reps || 0) / 30);
 async function weeklySummary(env, push = true) {
   const today = pragueDate();
   const from = new Date(today); from.setDate(from.getDate() - 6);
   const fromS = from.toISOString().slice(0, 10);
-  const all = (await env.DB.prepare('SELECT date,day_name,data,note FROM workouts ORDER BY date ASC').all()).results.map(w => ({ ...w, data: JSON.parse(w.data || '[]') }));
+  const all = (await env.DB.prepare('SELECT date,day_name,data,note,supps FROM workouts ORDER BY date ASC').all()).results.map(w => ({ ...w, data: JSON.parse(w.data || '[]'), supps: JSON.parse(w.supps || '[]') }));
   const week = all.filter(w => w.date >= fromS), before = all.filter(w => w.date < fromS);
   const bestBefore = {};
   for (const w of before) for (const e of w.data) for (const s of e.sets) if (s.reps) bestBefore[exKey(e.name)] = Math.max(bestBefore[exKey(e.name)] || 0, e1rm(s.kg, s.reps));
@@ -402,7 +446,8 @@ async function weeklySummary(env, push = true) {
 Tréninky: ${week.map(w => w.date + ' ' + (w.day_name || '')).join('; ') || 'žádné'}.
 Nové rekordy (e1RM, Epley): ${prs.join('; ') || 'žádné'}.
 Váha: ${ck.length ? ck.map(c => `${c.date} ${c.weight} kg${c.waist ? ', pas ' + c.waist + ' cm' : ''}`).join(' | ') : 'bez dat'}.
-Poznámky z tréninků: ${week.map(w => w.note).filter(Boolean).join(' | ') || '-'}.`;
+Poznámky z tréninků: ${week.map(w => w.note).filter(Boolean).join(' | ') || '-'}.
+Suplementy (zaškrtnuté u tréninků): ${(() => { const c = {}; week.forEach(w => w.supps.forEach(x => c[x] = (c[x] || 0) + 1)); return Object.entries(c).map(([k, v]) => `${k} ${v}/${week.length}`).join(', ') || 'nic nezaškrtnuto'; })()}.`;
   const { ctx } = await buildContext(env);
   const text = (await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: `Napiš týdenní souhrn (max ~150 slov, bez Markdown nadpisů): 1) jak dopadl týden vs. cíl, 2) rekordy a pokrok, 3) jedna až dvě konkrétní úpravy na příští týden. Použij jen tato data, nic si nevymýšlej:\n${stats}` }], 900, 'summary'))
     .replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
@@ -428,7 +473,7 @@ async function exportAll(env) {
     app: 'fitko-robutek', exported: now(), version: 1,
     profile: await getKV(env, 'profile', {}), memory: await getKV(env, 'memory', ''),
     plans: (await q('SELECT id,data,created FROM plans ORDER BY id')).map(r => ({ ...r, data: JSON.parse(r.data) })),
-    workouts: (await q('SELECT id,date,day_name,data,note,created FROM workouts ORDER BY date,id')).map(r => ({ ...r, data: JSON.parse(r.data || '[]') })),
+    workouts: (await q('SELECT id,date,day_name,data,note,supps,created FROM workouts ORDER BY date,id')).map(r => ({ ...r, data: JSON.parse(r.data || '[]'), supps: JSON.parse(r.supps || '[]') })),
     checkins: (await q('SELECT id,date,weight,waist,note,photos,analysis,created FROM checkins ORDER BY date,id')).map(r => ({ ...r, photos: JSON.parse(r.photos || '{}') })),
     chat: await q('SELECT role,content,created FROM chat ORDER BY id'),
     usage: await q('SELECT day,kind,model,SUM(input) input,SUM(output) output,COUNT(*) calls FROM usage GROUP BY day,kind,model ORDER BY day'),
@@ -451,7 +496,7 @@ async function usageReport(env) {
   const rows = (await env.DB.prepare('SELECT day,kind,model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw,COUNT(*) n FROM usage WHERE day>=? OR day LIKE ? GROUP BY day,kind,model').bind(sinceS, month + '%').all()).results;
   const agg = f => rows.filter(f).reduce((a, r) => ({ calls: a.calls + r.n, input: a.input + r.i, output: a.output + r.o, usd: a.usd + usdOf(r.model, r.i, r.o, r.cr, r.cw) }), { calls: 0, input: 0, output: 0, usd: 0 });
   const days = []; for (let i = 0; i < 30; i++) { const d = new Date(sinceS); d.setDate(d.getDate() + i); const k = d.toISOString().slice(0, 10); days.push({ day: k, ...agg(r => r.day === k) }); }
-  const kinds = ['chat', 'checkin', 'swap', 'summary', 'memory'].map(k => ({ kind: k, ...agg(r => r.day.startsWith(month) && r.kind === k) }));
+  const kinds = ['chat', 'checkin', 'swap', 'summary', 'memory', 'morning'].map(k => ({ kind: k, ...agg(r => r.day.startsWith(month) && r.kind === k) }));
   const all = await env.DB.prepare('SELECT SUM(input) i,SUM(output) o,COUNT(*) n,MIN(day) first FROM usage').first();
   const mt = agg(r => r.day.startsWith(month));
   const dim = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate(), dom = +today.slice(8, 10);
@@ -478,7 +523,8 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
       await ensureSchema(env);
-      if (/SUN|\* 1$|\* 7$/.test(event.cron) && !/\* \* \* \*$/.test(event.cron)) { await weeklySummary(env, true); await autoBackup(env); }
+      if (event.cron === '0 6 * * *') await morningPing(env);
+      else if (/SUN|\* 1$|\* 7$/.test(event.cron) && !/\* \* \* \*$/.test(event.cron)) { await weeklySummary(env, true); await autoBackup(env); }
       else await dailyNag(env);
     })());
   },
@@ -495,12 +541,14 @@ export default {
         const plan = await latestPlan(env);
         const checkins = (await env.DB.prepare('SELECT id,date,weight,waist,note,photos,analysis FROM checkins ORDER BY date DESC, id DESC LIMIT 50').all()).results
           .map(c => ({ ...c, photos: JSON.parse(c.photos || '{}') }));
-        const workouts = (await env.DB.prepare('SELECT id,date,day_name,data,note FROM workouts ORDER BY date DESC, id DESC LIMIT 60').all()).results
-          .map(w => ({ ...w, data: JSON.parse(w.data || '[]') }));
+        const workouts = (await env.DB.prepare('SELECT id,date,day_name,data,note,supps FROM workouts ORDER BY date DESC, id DESC LIMIT 60').all()).results
+          .map(w => ({ ...w, data: JSON.parse(w.data || '[]'), supps: JSON.parse(w.supps || '[]') }));
         const chat = (await env.DB.prepare('SELECT id,role,content,created FROM chat ORDER BY id DESC LIMIT 80').all()).results.reverse();
         const mu = await env.DB.prepare('SELECT model,SUM(input) i,SUM(output) o,SUM(cache_read) cr,SUM(cache_write) cw FROM usage WHERE day LIKE ? GROUP BY model').bind(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' }).slice(0, 7) + '%').all();
         const usage = { monthUsd: mu.results.reduce((a, r) => a + usdOf(r.model, r.i, r.o, r.cr, r.cw), 0), budget: await getKV(env, 'budget_usd') };
-        return json(req, { profile, plan, checkins, workouts, chat, usage });
+        const mo = await getKV(env, 'morning');
+        const morning = { today: mo && mo.date === pragueDate() ? mo : null, on: (await getKV(env, 'morning_on', true)) !== false, date: pragueDate() };
+        return json(req, { profile, plan, checkins, workouts, chat, usage, morning });
       }
       if (p === '/profile' && req.method === 'PUT') {
         const body = await req.json();
@@ -529,6 +577,14 @@ export default {
       if (p === '/push/test' && req.method === 'POST') {
         return json(req, { sent: await pushAll(env, { title: 'Bráška tě zdraví 💪', body: 'Upozornění fungují. Teď hurá do posilovny.', tag: 'test', url: './' }) });
       }
+      if (p === '/morning' && req.method === 'POST') {
+        const { slot, time, supps } = await req.json();
+        if (!SLOTS[slot]) return json(req, { error: 'bad slot' }, 400);
+        const t = /^\d{1,2}:\d{2}$/.test(time || '') ? time : '';
+        return json(req, await morningBrief(env, slot, t, (Array.isArray(supps) ? supps : []).map(x => String(x).slice(0, 40)).slice(0, 12)));
+      }
+      if (p === '/morning/settings' && req.method === 'PUT') { const { on } = await req.json(); await setKV(env, 'morning_on', !!on); return json(req, { ok: true }); }
+      if (p === '/morning/ping' && req.method === 'POST') { await setKV(env, 'morning', null); return json(req, await morningPing(env)); }
       if (p === '/export' && req.method === 'GET') return json(req, await exportAll(env));
       if (p === '/backups' && req.method === 'GET') { const l = await env.PHOTOS.list({ prefix: 'backup/' }); return json(req, { backups: l.keys.map(k => k.name).sort().reverse() }); }
       if (p === '/backup/now' && req.method === 'POST') return json(req, { key: await autoBackup(env) });
@@ -557,8 +613,8 @@ export default {
       if (p === '/workout' && req.method === 'POST') {
         const w = await req.json();
         (w.exercises || []).forEach(e => { e.name = canonEx(e.name); });
-        const r = await env.DB.prepare('INSERT INTO workouts (date,day_name,data,note,created) VALUES (?,?,?,?,?) RETURNING id')
-          .bind(w.date || now().slice(0, 10), w.day_name || '', JSON.stringify(w.exercises || []), w.note || '', now()).first();
+        const r = await env.DB.prepare('INSERT INTO workouts (date,day_name,data,note,supps,created) VALUES (?,?,?,?,?,?) RETURNING id')
+          .bind(w.date || now().slice(0, 10), w.day_name || '', JSON.stringify(w.exercises || []), w.note || '', JSON.stringify((Array.isArray(w.supps) ? w.supps : []).map(x => String(x).slice(0, 40)).slice(0, 12)), now()).first();
         return json(req, { id: r.id });
       }
       if ((m = p.match(/^\/workout\/(\d+)$/)) && req.method === 'DELETE') {
