@@ -4,71 +4,132 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
-<title>💪 Mattyho fitko robůtek</title>
+<title>Fitko robůtek</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E💪%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0f1115;--card:#181b22;--card2:#20242d;--line:#2b303b;--tx:#e8eaef;--mut:#8b93a3;--acc:#ff7a1a;--acc2:#ffb067;--ok:#3ecf8e;--err:#ff5d5d}
+:root{--bg:#0c0e13;--card:#161a22;--card2:#1e232d;--line:#2a303c;--tx:#eef0f4;--mut:#8f97a8;--acc:#ff7a1a;--acc2:#ffb067;--acc3:#ff4d6d;--ok:#3ecf8e;--err:#ff5d5d;--glow:rgba(255,122,26,.18)}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
-header{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:10px}
-header h1{font-size:17px;font-weight:700;flex:1}
-header small{color:var(--mut);font-size:12px}
-main{max-width:760px;margin:0 auto;padding:16px}
-.view{display:none}.view[data-active="1"]{display:block}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
-.card h2{font-size:15px;margin-bottom:10px}
+html,body{background:var(--bg);color:var(--tx);font:15px/1.5 "Outfit",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body{padding-bottom:calc(76px + env(safe-area-inset-bottom));min-height:100vh;
+  background:radial-gradient(900px 500px at 10% -10%,rgba(255,122,26,.13),transparent 60%),radial-gradient(700px 500px at 110% 10%,rgba(255,77,109,.10),transparent 60%),var(--bg);background-attachment:fixed}
+header{position:sticky;top:0;z-index:5;background:rgba(12,14,19,.78);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:8px 16px;display:flex;align-items:center;gap:10px}
+header .av{width:42px;height:42px;flex:0 0 42px}
+header .who{flex:1;line-height:1.2}
+header .who b{font-size:16px;font-weight:700;display:block}
+header .who span{font-size:12px;color:var(--ok)}
+header .who span.busy{color:var(--acc2)}
+header small{color:var(--mut);font-size:12px;text-align:right}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.view{display:none;animation:fade .25s ease}.view[data-active="1"]{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.025),transparent),var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.card h2{font-size:17px;font-weight:700;margin-bottom:10px}
 .mut{color:var(--mut);font-size:13px}
-label{display:block;font-size:12px;color:var(--mut);margin:8px 0 4px}
-input,textarea,select{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:10px;padding:10px;font:inherit}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 4px;font-weight:500}
+input,textarea,select{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:12px;padding:10px 12px;font:inherit}
 textarea{resize:vertical;min-height:44px}
 input:focus,textarea:focus,select:focus{outline:2px solid var(--acc);border-color:transparent}
-button{background:var(--acc);color:#111;border:0;border-radius:10px;padding:10px 14px;font:600 14px inherit;font-family:inherit;cursor:pointer}
-button.sec{background:var(--card2);color:var(--tx);border:1px solid var(--line)}
-button.ghost{background:none;color:var(--mut);padding:6px 8px}
+button{background:linear-gradient(135deg,var(--acc),var(--acc3));color:#fff;border:0;border-radius:12px;padding:10px 16px;font:600 14px "Outfit",sans-serif;cursor:pointer;transition:transform .1s,filter .2s;box-shadow:0 4px 14px rgba(255,90,40,.25)}
+button:hover{filter:brightness(1.08)}button:active{transform:scale(.97)}
+button.sec{background:var(--card2);color:var(--tx);border:1px solid var(--line);box-shadow:none}
+button.ghost{background:none;color:var(--mut);padding:6px 8px;box-shadow:none}
+button.ghost:hover{color:var(--acc2)}
 button:disabled{opacity:.5;cursor:default}
 .row{display:flex;gap:8px;align-items:center}
 .row>*{flex:1}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-nav{position:fixed;bottom:0;left:0;right:0;z-index:6;background:#12151b;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
-nav div{flex:1;text-align:center;padding:9px 0 8px;font-size:11px;color:var(--mut);cursor:pointer;user-select:none}
-nav div b{display:block;font-size:20px;line-height:1.1}
-nav div[data-active="1"]{color:var(--acc)}
+nav{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);width:min(560px,calc(100% - 24px));z-index:6;background:rgba(22,26,34,.9);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:22px;display:flex;padding:4px;margin-bottom:env(safe-area-inset-bottom);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+nav div{flex:1;text-align:center;padding:7px 0 6px;font-size:11px;color:var(--mut);cursor:pointer;user-select:none;border-radius:16px;transition:background .2s,color .2s;font-weight:500}
+nav div b{display:block;font-size:20px;line-height:1.15}
+nav div[data-active="1"]{color:#fff;background:linear-gradient(135deg,rgba(255,122,26,.25),rgba(255,77,109,.2))}
+/* layout chat */
+#v-chat[data-active="1"]{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+#coach{display:none}
+@media(min-width:960px){#v-chat[data-active="1"]{grid-template-columns:300px minmax(0,1fr)}#coach{display:block;position:sticky;top:76px;align-self:start}}
+#chatCol{display:flex;flex-direction:column;min-height:calc(100vh - 190px);min-width:0}
+#coach .stage{display:flex;justify-content:center;padding:6px 0 0}
+#coach .stage svg{width:200px;height:230px}
+.stat{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.stat:first-of-type{border-top:0}
+.stat b{color:var(--acc2);font-weight:600}
 /* chat */
-#chatLog{display:flex;flex-direction:column;gap:8px;min-height:50vh;padding-bottom:90px}
-.msg{max-width:88%;padding:10px 12px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
-.msg.user{align-self:flex-end;background:var(--acc);color:#111;border-bottom-right-radius:4px}
-.msg.assistant{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
+#chatLog{display:flex;flex-direction:column;gap:10px;flex:1;padding-bottom:12px;max-width:820px;width:100%;margin:0 auto}
+.mrow{display:flex;gap:8px;align-items:flex-end;animation:pop .25s ease}
+.mrow.user{justify-content:flex-end}
+.mrow .av{width:36px;height:36px;flex:0 0 36px}
+@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+.msg{max-width:min(84%,620px);padding:10px 14px;border-radius:18px;white-space:pre-wrap;word-wrap:break-word}
+.msg.user{background:linear-gradient(135deg,var(--acc),var(--acc3));color:#fff;border-bottom-right-radius:6px}
+.msg.assistant{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:6px}
 .msg .t{display:block;font-size:10px;opacity:.6;margin-top:4px}
-#chatBar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line);padding:8px 16px;z-index:4}
-#chatBar .row{max-width:760px;margin:0 auto}
-#chatBar textarea{min-height:42px;max-height:140px}
-#chatBar button{flex:0 0 auto}
-.typing{color:var(--mut);font-size:13px;padding:4px 2px}
-.pill{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;margin:2px 4px 2px 0;cursor:pointer}
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px 0 4px}
+.hero svg{width:170px;height:195px}
+.hero .bubble{position:relative;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 16px;max-width:520px;margin-top:6px}
+.hero .bubble:before{content:"";position:absolute;top:-8px;left:50%;width:14px;height:14px;background:var(--card);border-left:1px solid var(--line);border-top:1px solid var(--line);transform:translateX(-50%) rotate(45deg)}
+.hero h3{font-size:20px;margin-bottom:4px}
+#chatBar{position:sticky;bottom:calc(80px + env(safe-area-inset-bottom));padding:10px 0 6px;z-index:4;background:linear-gradient(0deg,var(--bg) 75%,transparent)}
+#chatBar .inner{max-width:820px;margin:0 auto}
+#chatBar .row{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:5px 5px 5px 4px}
+#chatBar textarea{min-height:40px;max-height:140px;border:0;background:transparent;resize:none}
+#chatBar textarea:focus{outline:none}
+#chatBar button{flex:0 0 auto;border-radius:14px;width:44px;height:40px;padding:0;font-size:16px}
+.typing{display:flex;gap:8px;align-items:flex-end;padding:4px 0;max-width:820px;width:100%;margin:0 auto}
+.typing .av{width:36px;height:36px}
+.dots{background:var(--card);border:1px solid var(--line);border-radius:18px;border-bottom-left-radius:6px;padding:12px 14px;display:flex;gap:4px}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--acc2);animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{0%,60%,100%{opacity:.3;transform:none}30%{opacity:1;transform:translateY(-4px)}}
+#quick{display:flex;gap:6px;overflow-x:auto;padding:6px 2px 0;scrollbar-width:none}
+.pill{flex:0 0 auto;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;white-space:nowrap;transition:border-color .2s}
+.pill:hover{border-color:var(--acc)}
+/* mascot */
+.mascot .eye{transform-box:fill-box;transform-origin:center;animation:blink 4.5s infinite}
+@keyframes blink{0%,94%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+.mascot.bounce{animation:bounce 2.6s ease-in-out infinite}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.mascot .arm-l{transform-box:fill-box;transform-origin:85% 90%}
+.mascot.bounce .arm-l{animation:curl 2.6s ease-in-out infinite}
+@keyframes curl{0%,100%{transform:rotate(0)}50%{transform:rotate(-14deg)}}
+.mascot.talk .mouth-o{animation:talk .35s infinite alternate}
+.mascot .mouth-o{transform-box:fill-box;transform-origin:center}
+@keyframes talk{from{transform:scaleY(.35)}to{transform:scaleY(1)}}
+.mascot .ant{animation:glow 1.6s ease-in-out infinite alternate}
+@keyframes glow{from{opacity:.55}to{opacity:1}}
 /* plan */
-.day h3{font-size:14px;color:var(--acc2);margin-bottom:6px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase}
+.day h3{font-size:16px;color:var(--acc2);margin-bottom:6px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
 /* workout */
-.ex{background:var(--card2);border-radius:10px;padding:10px;margin-bottom:8px}
+.ex{background:var(--card2);border-radius:14px;padding:12px;margin-bottom:8px;border:1px solid transparent}
 .ex .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600}
 .set{display:grid;grid-template-columns:28px 1fr 1fr 32px;gap:6px;align-items:center;margin-bottom:4px}
 .set span{color:var(--mut);font-size:12px;text-align:center}
 .set input{padding:8px}
+.swap{border-top:1px solid var(--line);margin:6px 0;padding-top:8px}
+.opt{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:6px;font-size:13px}
+.last{background:linear-gradient(90deg,rgba(255,122,26,.12),transparent),var(--card2);border-left:3px solid var(--acc);border-radius:12px;padding:10px 12px;font-size:13px}
 .hist{border-top:1px solid var(--line);padding:8px 0;font-size:13px}
 .hist:first-child{border-top:0}
 /* checkin */
-.ph{aspect-ratio:3/4;background:var(--card2);border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--mut);font-size:12px;cursor:pointer;overflow:hidden;position:relative}
+.ph{aspect-ratio:3/4;background:var(--card2);border:1.5px dashed var(--line);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--mut);font-size:12px;cursor:pointer;overflow:hidden;position:relative;transition:border-color .2s}
+.ph:hover{border-color:var(--acc)}
+.ph:before{content:"📷";font-size:22px;margin-bottom:4px}
 .ph img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
 .ph input{display:none}
 .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
-.thumbs img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:var(--card2)}
+.thumbs img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;background:var(--card2)}
 .cmp{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.cmp img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:var(--card2)}
-.analysis{white-space:pre-wrap;font-size:14px;background:var(--card2);border-radius:10px;padding:10px;margin-top:6px}
-#toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);padding:9px 14px;border-radius:10px;z-index:20;display:none;font-size:14px}
-#login{max-width:360px;margin:18vh auto 0;padding:16px}
+.cmp img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;background:var(--card2)}
+.analysis{white-space:pre-wrap;font-size:14px;background:var(--card2);border-radius:12px;padding:10px;margin-top:6px}
+#v-plan,#v-log,#v-check,#v-prof{max-width:760px;margin:0 auto}
+#toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--card);border:1px solid var(--line);padding:6px 14px 6px 6px;border-radius:16px;z-index:20;display:none;font-size:14px;align-items:center;gap:8px;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:pop .25s ease}
+#toast .av{width:34px;height:34px}
+#login{max-width:380px;margin:10vh auto 0;padding:16px;text-align:center}
+#login .card{text-align:left}
+#login svg{width:170px;height:195px}
 svg text{fill:var(--mut);font-size:10px}
 </style>
 </head>
@@ -76,8 +137,9 @@ svg text{fill:var(--mut);font-size:10px}
 <div id="toast"></div>
 
 <div id="login" style="display:none">
+  <div id="loginMascot"></div>
   <div class="card">
-    <h2>💪 Mattyho fitko robůtek</h2>
+    <h2>Mattyho fitko robůtek</h2>
     <label>Heslo</label>
     <input id="pw" type="password" autocomplete="current-password">
     <div style="margin-top:10px"><button id="loginBtn" style="width:100%">Přihlásit</button></div>
@@ -86,12 +148,22 @@ svg text{fill:var(--mut);font-size:10px}
 </div>
 
 <div id="app" style="display:none">
-<header><h1>💪 Fitko robůtek</h1><small id="hdrInfo"></small></header>
+<header><div class="av" id="hdrAv"></div><div class="who"><b>Trenér Fitko</b><span id="hdrStatus">online · připraven</span></div><small id="hdrInfo"></small></header>
 <main>
   <!-- TRENÉR -->
   <section class="view" id="v-chat" data-active="1">
-    <div id="chatLog"></div>
-    <div class="typing" id="typing" style="display:none">Trenér píše…</div>
+    <aside id="coach" class="card"><div class="stage" id="coachStage"></div><h2 style="text-align:center;margin:4px 0 2px">Trenér Fitko</h2><p class="mut" style="text-align:center;margin-bottom:10px" id="coachLine">Jdeme makat.</p><div id="coachStats"></div></aside>
+    <div id="chatCol">
+      <div id="chatLog"></div>
+      <div class="typing" id="typing" style="display:none"><div class="av" id="typAv"></div><div class="dots"><i></i><i></i><i></i></div></div>
+      <div id="chatBar"><div class="inner">
+  <div class="row">
+    <textarea id="chatIn" rows="1" placeholder="Napiš trenérovi…"></textarea>
+    <button id="chatSend">➤</button>
+  </div>
+  <div id="quick"></div>
+</div></div>
+    </div>
   </section>
 
   <!-- PLÁN -->
@@ -107,6 +179,7 @@ svg text{fill:var(--mut);font-size:10px}
         <div><label>Datum</label><input type="date" id="wDate"></div>
         <div><label>Den plánu</label><select id="wDay"></select></div>
       </div>
+      <div id="wLast" style="margin-top:10px"></div>
       <div id="wEx" style="margin-top:10px"></div>
       <div class="row" style="margin-top:6px">
         <input id="wNewEx" placeholder="Přidat cvik…">
@@ -161,13 +234,7 @@ svg text{fill:var(--mut);font-size:10px}
   </section>
 </main>
 
-<div id="chatBar">
-  <div class="row">
-    <textarea id="chatIn" rows="1" placeholder="Napiš trenérovi…"></textarea>
-    <button id="chatSend">➤</button>
-  </div>
-  <div style="max-width:760px;margin:4px auto 0" id="quick"></div>
-</div>
+
 
 <nav>
   <div data-v="chat" data-active="1"><b>💬</b>Trenér</div>
@@ -179,6 +246,87 @@ svg text{fill:var(--mut);font-size:10px}
 </div>
 
 <script>
+/* Trenér Fitko — original SVG mascot. mood: idle | talk | happy | think | flex */
+let _mid = 0;
+function mascot(mood = 'idle', opt = {}) {
+  const u = 'm' + (++_mid);
+  const head = !!opt.head;
+  const vb = head ? '38 2 124 118' : '0 0 200 232';
+  const eyes = {
+    happy: `<path d="M74 78 q8 -10 16 0" stroke="url(#${u}eye)" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M110 78 q8 -10 16 0" stroke="url(#${u}eye)" stroke-width="6" fill="none" stroke-linecap="round"/>`,
+    think: `<g class="eye"><rect x="75" y="68" width="13" height="16" rx="6.5" fill="url(#${u}eye)"/><circle cx="84" cy="72" r="2.6" fill="#fff"/></g><g class="eye"><rect x="112" y="72" width="13" height="10" rx="5" fill="url(#${u}eye)"/><circle cx="121" cy="75" r="2.2" fill="#fff"/></g>`,
+  }[mood] || `<g class="eye"><rect x="75" y="66" width="13" height="19" rx="6.5" fill="url(#${u}eye)"/><circle cx="84.5" cy="71" r="2.8" fill="#fff"/></g><g class="eye"><rect x="112" y="66" width="13" height="19" rx="6.5" fill="url(#${u}eye)"/><circle cx="121.5" cy="71" r="2.8" fill="#fff"/></g>`;
+  const mouth = {
+    talk: `<ellipse class="mouth-o" cx="100" cy="92" rx="7" ry="5.5" fill="#ff8fa3"/>`,
+    happy: `<path d="M88 88 q12 14 24 0 z" fill="#ff8fa3" stroke="#ffd0d8" stroke-width="1.5" stroke-linejoin="round"/>`,
+    think: `<path d="M93 92 h10 q4 0 6 -3" stroke="#ff8fa3" stroke-width="3.5" fill="none" stroke-linecap="round"/>`,
+  }[mood] || `<path d="M90 89 q10 9 20 0" stroke="#ff8fa3" stroke-width="3.5" fill="none" stroke-linecap="round"/>`;
+  const defs = `<defs>
+    <linearGradient id="${u}skin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb05c"/><stop offset=".55" stop-color="#ff7a1a"/><stop offset="1" stop-color="#e2531c"/></linearGradient>
+    <linearGradient id="${u}skin2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc07a"/><stop offset="1" stop-color="#ff7d22"/></linearGradient>
+    <linearGradient id="${u}visor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2e3445"/><stop offset="1" stop-color="#11141b"/></linearGradient>
+    <linearGradient id="${u}eye" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8fbff"/><stop offset="1" stop-color="#38d6f5"/></linearGradient>
+    <linearGradient id="${u}band" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff3d5e"/><stop offset="1" stop-color="#d81e45"/></linearGradient>
+    <linearGradient id="${u}metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef2f7"/><stop offset=".5" stop-color="#a9b3c1"/><stop offset="1" stop-color="#6b7584"/></linearGradient>
+    <linearGradient id="${u}plate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a5163"/><stop offset="1" stop-color="#1e2230"/></linearGradient>
+    <linearGradient id="${u}shorts" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34406a"/><stop offset="1" stop-color="#232c4d"/></linearGradient>
+    <radialGradient id="${u}glow"><stop offset="0" stop-color="#b8fbff"/><stop offset=".45" stop-color="#38d6f5"/><stop offset="1" stop-color="#38d6f5" stop-opacity="0"/></radialGradient>
+    <filter id="${u}sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".35"/></filter>
+  </defs>`;
+  const headSvg = `
+    <g filter="url(#${u}sh)">
+      <line x1="100" y1="28" x2="100" y2="12" stroke="#5b6475" stroke-width="4" stroke-linecap="round"/>
+      <circle class="ant" cx="100" cy="10" r="11" fill="url(#${u}glow)"/>
+      <circle cx="100" cy="10" r="5" fill="#dffdff"/>
+      <circle cx="47" cy="72" r="8" fill="url(#${u}metal)"/><circle cx="153" cy="72" r="8" fill="url(#${u}metal)"/>
+      <rect x="50" y="26" width="100" height="90" rx="38" fill="url(#${u}skin2)"/>
+      <path d="M62 44 q10 -14 30 -15" stroke="#fff" stroke-opacity=".45" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M52 44 q48 -14 96 0 v11 q-48 -13 -96 0 z" fill="url(#${u}band)"/>
+      <path d="M53 50 q47 -12 94 0" stroke="#fff" stroke-width="2" fill="none" opacity=".85"/>
+      <path d="M146 47 q14 2 20 12 q-10 -2 -16 1 z" fill="#d81e45"/><path d="M146 50 q10 10 9 22 q-6 -8 -12 -10 z" fill="#ff3d5e"/>
+      <rect x="62" y="56" width="76" height="50" rx="22" fill="url(#${u}visor)"/>
+      <path d="M70 62 q20 -4 44 -2" stroke="#fff" stroke-opacity=".12" stroke-width="4" fill="none" stroke-linecap="round"/>
+      ${eyes}
+      <ellipse cx="72" cy="94" rx="6" ry="3.5" fill="#ff6b8a" opacity=".45"/><ellipse cx="128" cy="94" rx="6" ry="3.5" fill="#ff6b8a" opacity=".45"/>
+      ${mouth}
+    </g>`;
+  if (head) return `<svg class="mascot ${opt.cls || ''} ${mood}" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${defs}${headSvg}</svg>`;
+  const thinkBubble = mood === 'think' ? `<circle cx="160" cy="34" r="4" fill="#fff" opacity=".7"/><circle cx="170" cy="22" r="6" fill="#fff" opacity=".8"/><ellipse cx="184" cy="8" rx="12" ry="8" fill="#fff" opacity=".9"/>` : '';
+  const sparkle = mood === 'happy' ? `<g fill="#ffd166"><path d="M24 40 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z"/><path d="M178 92 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z"/></g>` : '';
+  return `<svg class="mascot ${opt.cls || ''} ${mood}" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${defs}
+    <ellipse cx="100" cy="224" rx="50" ry="6" fill="#000" opacity=".35"/>
+    ${sparkle}${thinkBubble}
+    <g filter="url(#${u}sh)">
+      <!-- legs -->
+      <rect x="76" y="178" width="18" height="34" rx="9" fill="#5b6475"/><rect x="106" y="178" width="18" height="34" rx="9" fill="#5b6475"/>
+      <path d="M70 214 q0 -9 14 -9 h10 q4 0 4 5 v6 q0 3 -3 3 h-22 q-3 0 -3 -5z" fill="#f4f6fa"/><path d="M68 216 h30" stroke="#ff3d5e" stroke-width="3" stroke-linecap="round"/>
+      <path d="M102 214 q0 -5 4 -5 h10 q14 0 14 9 q0 5 -3 5 h-22 q-3 0 -3 -3z" fill="#f4f6fa"/><path d="M102 216 h30" stroke="#ff3d5e" stroke-width="3" stroke-linecap="round"/>
+      <!-- right arm (down) -->
+      <path d="M138 128 q20 8 18 40" stroke="url(#${u}skin)" stroke-width="17" fill="none" stroke-linecap="round"/>
+      <circle cx="156" cy="172" r="10" fill="#ffb05c"/>
+      <!-- torso -->
+      <rect x="58" y="112" width="84" height="74" rx="30" fill="url(#${u}skin)"/>
+      <path d="M58 160 h84 v8 q0 22 -30 22 h-24 q-30 0 -30 -22z" fill="url(#${u}shorts)"/>
+      <path d="M60 162 h80" stroke="#ff7a1a" stroke-width="3"/>
+      <ellipse cx="74" cy="128" rx="8" ry="12" fill="#fff" opacity=".22"/>
+      <circle cx="100" cy="138" r="14" fill="#fff" opacity=".95"/>
+      <path d="M103 128 l-8 12 h6 l-3 9 9 -13 h-6z" fill="#ff5a2a"/>
+      <!-- whistle -->
+      <path d="M86 114 l12 16 M114 114 l-12 16" stroke="#e8edf3" stroke-width="1.6" fill="none"/>
+      <!-- left arm (flex + dumbbell) -->
+      <g class="arm-l">
+        <path d="M62 130 q-24 2 -26 -24" stroke="url(#${u}skin)" stroke-width="17" fill="none" stroke-linecap="round"/>
+        <circle cx="36" cy="102" r="10" fill="#ffb05c"/>
+        <rect x="14" y="98" width="44" height="7" rx="3.5" fill="url(#${u}metal)"/>
+        <rect x="10" y="88" width="10" height="27" rx="4" fill="url(#${u}plate)"/><rect x="52" y="88" width="10" height="27" rx="4" fill="url(#${u}plate)"/>
+        <rect x="5" y="92" width="6" height="19" rx="3" fill="url(#${u}plate)"/><rect x="61" y="92" width="6" height="19" rx="3" fill="url(#${u}plate)"/>
+      </g>
+      <rect x="88" y="106" width="24" height="10" rx="5" fill="#5b6475"/>
+    </g>
+    ${headSvg}
+  </svg>`;
+}
+
 const WORKER_URL = 'https://fitko-trener.svigruha1803.workers.dev';
 let PW = '';
 try { PW = localStorage.getItem('fitko_pw') || ''; } catch (e) {}
@@ -188,7 +336,34 @@ const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
-function toast(t, ms = 2500) { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => e.style.display = 'none', ms); }
+function toast(t, ms = 2600, mood = 'happy') { const e = $('#toast'); e.innerHTML = `<div class="av">${mascot(mood, { head: true })}</div><span>${esc(t)}</span>`; e.style.display = 'flex'; clearTimeout(toast.t); toast.t = setTimeout(() => e.style.display = 'none', ms); }
+/* ---------- coach / mascot state ---------- */
+let MOOD = 'idle', moodT;
+const LINES = {
+  idle: ['Jdeme makat.', 'Technika první, kila potom.', 'Konzistence > motivace.', 'Dnes trénink, nebo regenerace?', 'Zapiš každou sérii, ať víme, kam jdeme.'],
+  talk: ['Moment, přemýšlím…', 'Počítám to…', 'Skládám odpověď…'],
+  happy: ['Dobrá práce!', 'Tak se mi to líbí.', 'Další cihla do zdi.'],
+  think: ['Hledám náhradu…', 'Analyzuju fotky…'],
+};
+function setMood(m, ms) {
+  MOOD = m; clearTimeout(moodT);
+  const big = $('#coachStage'); if (big) big.innerHTML = mascot(m, { cls: 'bounce' + (m === 'talk' ? ' talk' : '') });
+  const av = $('#hdrAv'); if (av) av.innerHTML = mascot(m, { head: true, cls: m === 'talk' ? 'talk' : '' });
+  const ln = LINES[m] || LINES.idle; const cl = $('#coachLine'); if (cl) cl.textContent = ln[Math.floor(Math.random() * ln.length)];
+  const st = $('#hdrStatus'); if (st) { st.textContent = m === 'talk' ? 'píše…' : m === 'think' ? 'přemýšlí…' : 'online · připraven'; st.className = (m === 'talk' || m === 'think') ? 'busy' : ''; }
+  if (ms) moodT = setTimeout(() => setMood('idle'), ms);
+}
+function renderCoach() {
+  const c = S.checkins.find(x => x.weight != null);
+  const w = S.workouts[0];
+  const wk = S.workouts.filter(x => (Date.now() - new Date(x.date)) / 864e5 < 7).length;
+  const d = s => s ? s.split('-').reverse().join('.') : '–';
+  $('#coachStats').innerHTML = `<div class="stat"><span class="mut">Plán</span><b>${esc(S.plan?.name || 'zatím žádný')}</b></div>
+    <div class="stat"><span class="mut">Poslední trénink</span><b>${w ? d(w.date) : '–'}</b></div>
+    <div class="stat"><span class="mut">Tréninků za 7 dní</span><b>${wk}</b></div>
+    <div class="stat"><span class="mut">Váha</span><b>${c ? c.weight + ' kg' : '–'}</b></div>
+    <div class="stat"><span class="mut">Check-inů</span><b>${S.checkins.length}</b></div>`;
+}
 
 async function api(path, opts = {}) {
   const headers = { 'Authorization': 'Bearer ' + PW, ...(opts.headers || {}) };
@@ -203,7 +378,7 @@ async function api(path, opts = {}) {
 }
 
 /* ---------- login ---------- */
-function showLogin(err) { $('#app').style.display = 'none'; $('#login').style.display = 'block'; $('#loginErr').textContent = err || ''; }
+function showLogin(err) { $('#app').style.display = 'none'; $('#login').style.display = 'block'; $('#loginErr').textContent = err || ''; $('#loginMascot').innerHTML = mascot(err ? 'think' : 'idle', { cls: 'bounce' }); }
 $('#loginBtn').onclick = async () => {
   PW = $('#pw').value.trim();
   try { await load(); try { localStorage.setItem('fitko_pw', PW); } catch (e) {} }
@@ -217,7 +392,7 @@ async function load() {
   $('#login').style.display = 'none'; $('#app').style.display = 'block';
   renderAll();
 }
-function renderAll() { renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); }
+function renderAll() { renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); renderCoach(); setMood(MOOD); }
 function hdr() {
   const c = S.checkins[0];
   $('#hdrInfo').textContent = c ? `${c.weight ?? '–'} kg · check-in ${c.date.slice(5).split('-').reverse().join('.')}` : '';
@@ -228,7 +403,7 @@ $$('nav div').forEach(n => n.onclick = () => go(n.dataset.v));
 function go(v) {
   $$('nav div').forEach(n => n.dataset.active = n.dataset.v === v ? '1' : '0');
   $$('.view').forEach(s => s.dataset.active = s.id === 'v-' + v ? '1' : '0');
-  $('#chatBar').style.display = v === 'chat' ? 'block' : 'none';
+    document.body.dataset.view = v;
   if (v === 'chat') scrollChat();
   window.scrollTo(0, v === 'chat' ? document.body.scrollHeight : 0);
 }
@@ -237,27 +412,31 @@ function go(v) {
 function renderChat() {
   const log = $('#chatLog');
   if (!S.chat.length) {
-    log.innerHTML = `<div class="msg assistant">Čau, jsem tvůj fitko trenér. Napiš mi, čeho chceš dosáhnout, a dej mi základní info (věk, výška, zkušenosti s posilovnou, zranění, kolikrát týdně a jak dlouho chceš trénovat). Pak nahraj první check-in s fotkami a navrhnu plán.</div>`;
+    log.innerHTML = `<div class="hero">${mascot('happy', { cls: 'bounce' })}<div class="bubble"><h3>Čau, jsem trenér Fitko!</h3>Napiš mi, čeho chceš dosáhnout, a přidej základ: věk, výška, zkušenosti s posilovnou, zranění, kolikrát týdně a jak dlouho chceš trénovat. Pak nahraj první check-in s fotkami a postavím ti plán.</div></div>`;
   } else {
-    log.innerHTML = S.chat.map(m => `<div class="msg ${m.role === 'user' ? 'user' : 'assistant'}">${fmt(m.content)}<span class="t">${m.created ? new Date(m.created).toLocaleString('cs-CZ', { day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit' }) : ''}</span></div>`).join('');
+    const av = mascot('idle', { head: true });
+    log.innerHTML = S.chat.map(m => m.role === 'user'
+      ? `<div class="mrow user"><div class="msg user">${fmt(m.content)}<span class="t">${tm(m.created)}</span></div></div>`
+      : `<div class="mrow"><div class="av">${av}</div><div class="msg assistant">${fmt(m.content)}<span class="t">${tm(m.created)}</span></div></div>`).join('');
   }
   const q = ['Navrhni mi plán', 'Jak mám dnes trénovat?', 'Zhodnoť poslední týden', 'Uprav plán podle check-inu'];
   $('#quick').innerHTML = q.map(t => `<span class="pill">${t}</span>`).join('');
   $$('#quick .pill').forEach(p => p.onclick = () => { $('#chatIn').value = p.textContent; sendChat(); });
   scrollChat();
 }
+const tm = c => c ? new Date(c).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 function scrollChat() { requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight)); }
 async function sendChat() {
   const t = $('#chatIn').value.trim(); if (!t) return;
   $('#chatIn').value = ''; autoGrow();
   S.chat.push({ role: 'user', content: t, created: new Date().toISOString() });
-  renderChat(); $('#typing').style.display = 'block'; $('#chatSend').disabled = true;
+  renderChat(); $('#typAv').innerHTML = mascot('talk', { head: true, cls: 'talk' }); $('#typing').style.display = 'flex'; $('#chatSend').disabled = true; setMood('talk'); scrollChat();
   try {
     const r = await api('/chat', { method: 'POST', body: { message: t } });
     S.chat.push({ role: 'assistant', content: r.reply, created: new Date().toISOString() });
-    if (r.planSaved) { toast('📋 Plán aktualizován'); const st = await api('/state'); S.plan = st.plan; S.profile = st.profile; renderPlan(); renderLog(); renderProfile(); }
+    setMood('idle'); if (r.planSaved) { setMood('happy', 4000); toast('Plán uložen – mrkni do záložky Plán'); const st = await api('/state'); S.plan = st.plan; S.profile = st.profile; renderPlan(); renderLog(); renderProfile(); }
     else { const st = await api('/state'); S.profile = st.profile; renderProfile(); }
-  } catch (e) { S.chat.push({ role: 'assistant', content: '⚠️ Chyba: ' + e.message }); }
+  } catch (e) { setMood('think', 3000); S.chat.push({ role: 'assistant', content: 'Něco se pokazilo: ' + e.message }); }
   $('#typing').style.display = 'none'; $('#chatSend').disabled = false; renderChat();
 }
 $('#chatSend').onclick = sendChat;
@@ -269,13 +448,54 @@ $('#clearChat').onclick = async () => { await api('/chat', { method: 'DELETE' })
 /* ---------- plan ---------- */
 function renderPlan() {
   const p = S.plan;
-  if (!p) { $('#planBox').innerHTML = `<div class="card"><h2>Zatím žádný plán</h2><p class="mut">Domluv se s trenérem v chatu — plán se sem uloží automaticky.</p><div style="margin-top:10px"><button id="askPlan">Požádat o plán</button></div></div>`; $('#askPlan').onclick = () => { go('chat'); $('#chatIn').value = 'Navrhni mi tréninkový plán do posilovny.'; sendChat(); }; return; }
+  if (!p) { $('#planBox').innerHTML = `<div class="card hero" style="padding:24px">${mascot('think', { cls: 'bounce' })}<h2 style="margin-top:6px">Zatím žádný plán</h2><p class="mut">Domluv se se mnou v chatu a plán se sem uloží sám.</p><div style="margin-top:12px"><button id="askPlan">Postav mi plán</button></div></div>`; $('#askPlan').onclick = () => { go('chat'); $('#chatIn').value = 'Navrhni mi tréninkový plán do posilovny.'; sendChat(); }; return; }
   $('#planBox').innerHTML = `<div class="card"><h2>${esc(p.name || 'Plán')}</h2>${p.goal ? `<p class="mut">Cíl: ${esc(p.goal)}</p>` : ''}${p.progression ? `<p class="mut" style="margin-top:4px">Progrese: ${esc(p.progression)}</p>` : ''}<p class="mut" style="margin-top:4px">Uloženo ${new Date(p.created).toLocaleDateString('cs-CZ')}</p></div>` +
     (p.days || []).map(d => `<div class="card day"><h3>${esc(d.name)}</h3>${d.focus ? `<p class="mut" style="margin-bottom:6px">${esc(d.focus)}</p>` : ''}<table><tr><th>Cvik</th><th>Série</th><th>Opak.</th><th>Pauza</th></tr>${(d.exercises || []).map(e => `<tr><td>${esc(e.name)}${e.note ? `<div class="mut">${esc(e.note)}</div>` : ''}</td><td>${esc(e.sets)}</td><td>${esc(e.reps)}</td><td>${esc(e.rest || '')}</td></tr>`).join('')}</table></div>`).join('');
 }
 
 /* ---------- workout log ---------- */
 let W = [];
+let SW = {}; // swap panel state per exercise index
+function swapUI(i) {
+  const s = SW[i]; if (!s) return '';
+  if (s.state === 'ask') return `<div class="swap"><input id="swr${i}" placeholder="Proč? (volitelné: bolí rameno, obsazený stroj, nebaví mě…)"><button style="margin-top:6px;width:100%" data-swgo="${i}">Najít náhradu</button></div>`;
+  if (s.state === 'loading') return `<div class="swap mut">Trenér hledá náhradu…</div>`;
+  if (s.state === 'error') return `<div class="swap" style="color:var(--err)">${esc(s.error)} <button class="ghost" data-swgo="${i}">zkusit znovu</button></div>`;
+  return `<div class="swap">${s.options.map((o, k) => `<div class="opt"><b>${esc(o.name)}</b> <span class="mut">${esc(o.sets)}× ${esc(o.reps)}${o.rest ? ' · ' + esc(o.rest) : ''}</span>${o.why ? `<div class="mut">${esc(o.why)}</div>` : ''}${o.note ? `<div class="mut">Tip: ${esc(o.note)}</div>` : ''}<div class="row" style="margin-top:6px"><button class="sec" data-swpick="${i},${k},0">Jen dnes</button><button data-swpick="${i},${k},1">Natrvalo do plánu</button></div></div>`).join('')}</div>`;
+}
+async function findSwap(i) {
+  const e = W[i]; const reason = $('#swr' + i)?.value || SW[i]?.reason || '';
+  SW[i] = { state: 'loading', reason }; renderEx(); setMood('think');
+  const idx = $('#wDay').value;
+  const planEx = S.plan?.days?.[idx]?.exercises?.find(x => x.name === e.name) || {};
+  try {
+    const r = await api('/swap', { method: 'POST', body: { exercise: { name: e.name, sets: planEx.sets || e.sets.length, reps: planEx.reps || '' }, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', reason, current: W.map(x => x.name) } });
+    SW[i] = { state: 'pick', options: r.options, reason }; setMood('idle');
+  } catch (err) { SW[i] = { state: 'error', error: err.message, reason }; }
+  renderEx();
+}
+async function applySwap(i, k, permanent) {
+  const o = SW[i].options[k], old = W[i].name, reason = SW[i].reason;
+  W[i] = { name: o.name, target: `${o.sets}× ${o.reps}`, swappedFrom: old, sets: Array.from({ length: +o.sets || 3 }, () => ({ kg: '', reps: '' })) };
+  SW[i] = null;
+  if (permanent) {
+    const idx = $('#wDay').value;
+    if (idx !== '' && S.plan) {
+      const plan = JSON.parse(JSON.stringify(S.plan));
+      const ex = plan.days[idx].exercises.find(x => x.name === old);
+      if (ex) Object.assign(ex, { name: o.name, sets: o.sets, reps: o.reps, rest: o.rest || ex.rest, note: o.note || '' });
+      const { id, created, ...clean } = plan;
+      try { await api('/plan', { method: 'PUT', body: clean }); S.plan = { ...clean, id, created: new Date().toISOString() }; renderPlan(); } catch (e) { toast('Plán se neuložil: ' + e.message); }
+    }
+    const p = { ...(S.profile || {}) };
+    const note = `${old}${reason ? ' (' + reason + ')' : ''}`;
+    p.vyrazene_cviky = p.vyrazene_cviky ? (String(p.vyrazene_cviky).includes(old) ? p.vyrazene_cviky : p.vyrazene_cviky + '; ' + note) : note;
+    try { await api('/profile', { method: 'PUT', body: p }); S.profile = p; renderProfile(); } catch (e) {}
+    toast(`${old} → ${o.name} (natrvalo v plánu)`);
+  } else toast(`Dnes místo toho: ${o.name}`);
+  renderEx();
+}
+function lastDay(dayName) { return S.workouts.find(w => w.day_name === dayName); }
 function lastSets(name) {
   for (const w of S.workouts) { const e = (w.data || []).find(x => x.name.toLowerCase() === name.toLowerCase()); if (e) return e.sets.filter(s => s.reps); }
   return [];
@@ -284,18 +504,30 @@ function loadDay() {
   const idx = $('#wDay').value;
   const d = S.plan?.days?.[idx];
   W = d ? d.exercises.map(e => ({ name: e.name, target: `${e.sets}× ${e.reps}`, sets: Array.from({ length: +e.sets || 3 }, () => ({ kg: '', reps: '' })) })) : [];
+  SW = {};
+  renderLast();
   renderEx();
+}
+function renderLast() {
+  const idx = $('#wDay').value;
+  const d = S.plan?.days?.[idx];
+  const lw = d ? lastDay(d.name) : S.workouts[0];
+  $('#wLast').innerHTML = lw ? `<div class="last"><b>Naposled${d ? ' tento den' : ''}: ${lw.date.split('-').reverse().join('.')}${d ? '' : ' · ' + esc(lw.day_name)}</b>${(lw.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${e.sets.filter(s => s.reps).map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</span></div>`).join('')}${lw.note ? `<div class="mut">${esc(lw.note)}</div>` : ''}</div>` : '';
 }
 function renderEx() {
   $('#wEx').innerHTML = W.map((e, i) => {
     const prev = lastSets(e.name);
-    return `<div class="ex"><div class="hd"><span>${esc(e.name)} <span class="mut">${esc(e.target || '')}</span></span><button class="ghost" data-rm="${i}">✕</button></div>
+    return `<div class="ex"><div class="hd"><span>${esc(e.name)} <span class="mut">${esc(e.target || '')}</span>${e.swappedFrom ? `<div class="mut" style="font-weight:400">místo: ${esc(e.swappedFrom)}</div>` : ''}</span><span style="white-space:nowrap"><button class="ghost" data-sw="${i}" title="Vyměnit cvik">🔄 jiný</button><button class="ghost" data-rm="${i}">✕</button></span></div>
+    ${swapUI(i)}
     ${prev.length ? `<div class="mut" style="margin-bottom:6px">Minule: ${prev.map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</div>` : ''}
     ${e.sets.map((s, j) => `<div class="set"><span>${j + 1}</span><input inputmode="decimal" placeholder="kg${prev[j] ? ' (' + prev[j].kg + ')' : ''}" value="${esc(s.kg)}" data-i="${i}" data-j="${j}" data-f="kg"><input inputmode="numeric" placeholder="opak.${prev[j] ? ' (' + prev[j].reps + ')' : ''}" value="${esc(s.reps)}" data-i="${i}" data-j="${j}" data-f="reps"><button class="ghost" data-rs="${i},${j}">–</button></div>`).join('')}
     <button class="ghost" data-as="${i}">+ série</button></div>`;
   }).join('') || '<p class="mut">Vyber den plánu nebo přidej cvik.</p>';
-  $$('#wEx input').forEach(inp => inp.oninput = () => { W[inp.dataset.i].sets[inp.dataset.j][inp.dataset.f] = inp.value.replace(',', '.'); });
+  $$('#wEx input[data-f]').forEach(inp => inp.oninput = () => { W[inp.dataset.i].sets[inp.dataset.j][inp.dataset.f] = inp.value.replace(',', '.'); });
   $$('#wEx [data-rm]').forEach(b => b.onclick = () => { W.splice(+b.dataset.rm, 1); renderEx(); });
+  $$('#wEx [data-sw]').forEach(b => b.onclick = () => { const i = +b.dataset.sw; SW[i] = SW[i] ? null : { state: 'ask' }; renderEx(); });
+  $$('#wEx [data-swgo]').forEach(b => b.onclick = () => findSwap(+b.dataset.swgo));
+  $$('#wEx [data-swpick]').forEach(b => b.onclick = () => { const [i, k, perm] = b.dataset.swpick.split(','); applySwap(+i, +k, perm === '1'); });
   $$('#wEx [data-as]').forEach(b => b.onclick = () => { const e = W[+b.dataset.as]; const l = e.sets[e.sets.length - 1] || {}; e.sets.push({ kg: l.kg || '', reps: '' }); renderEx(); });
   $$('#wEx [data-rs]').forEach(b => b.onclick = () => { const [i, j] = b.dataset.rs.split(',').map(Number); W[i].sets.splice(j, 1); renderEx(); });
 }
@@ -305,7 +537,7 @@ function renderLog() {
   const cur = $('#wDay').value;
   $('#wDay').innerHTML = `<option value="">— vlastní —</option>` + days.map((d, i) => `<option value="${i}">${esc(d.name)}</option>`).join('');
   if (cur !== '' && days[cur]) $('#wDay').value = cur;
-  if (!W.length) loadDay(); else renderEx();
+  if (!W.length) loadDay(); else { renderLast(); renderEx(); }
   $('#wHist').innerHTML = S.workouts.map(w => `<div class="hist"><div class="row"><b style="flex:1">${w.date.split('-').reverse().join('.')} ${esc(w.day_name)}</b><button class="ghost" data-dw="${w.id}">smazat</button></div>${(w.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${e.sets.filter(s => s.reps).map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</span></div>`).join('')}${w.note ? `<div class="mut">${esc(w.note)}</div>` : ''}</div>`).join('') || '<p class="mut">Zatím nic.</p>';
   $$('[data-dw]').forEach(b => b.onclick = async () => { if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'opravdu?'; return; } await api('/workout/' + b.dataset.dw, { method: 'DELETE' }); S.workouts = S.workouts.filter(w => w.id != b.dataset.dw); renderLog(); });
 }
@@ -313,12 +545,12 @@ $('#wDay').onchange = loadDay;
 $('#wAddEx').onclick = () => { const n = $('#wNewEx').value.trim(); if (!n) return; W.push({ name: n, sets: [{ kg: '', reps: '' }, { kg: '', reps: '' }, { kg: '', reps: '' }] }); $('#wNewEx').value = ''; renderEx(); };
 $('#wSave').onclick = async () => {
   const ex = W.map(e => ({ name: e.name, sets: e.sets.filter(s => s.reps !== '').map(s => ({ kg: s.kg === '' ? 0 : +s.kg, reps: +s.reps })) })).filter(e => e.sets.length);
-  if (!ex.length) return toast('Vyplň aspoň jednu sérii');
+  if (!ex.length) return toast('Vyplň aspoň jednu sérii', 2600, 'think');
   const idx = $('#wDay').value;
   const body = { date: $('#wDate').value, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', exercises: ex, note: $('#wNote').value };
   $('#wSave').disabled = true;
-  try { const r = await api('/workout', { method: 'POST', body }); S.workouts.unshift({ id: r.id, ...body, data: ex }); W = []; $('#wNote').value = ''; loadDay(); renderLog(); toast('✅ Trénink uložen'); }
-  catch (e) { toast('Chyba: ' + e.message); }
+  try { const r = await api('/workout', { method: 'POST', body }); S.workouts.unshift({ id: r.id, ...body, data: ex }); W = []; $('#wNote').value = ''; loadDay(); renderLog(); toast('Trénink uložen. Dobrá práce!'); setMood('happy', 4000); renderCoach(); }
+  catch (e) { toast('Chyba: ' + e.message, 4000, 'think'); }
   $('#wSave').disabled = false;
 };
 
@@ -348,23 +580,23 @@ $$('.ph').forEach(ph => {
   };
 });
 $('#cSave').onclick = async () => {
-  if (!Object.keys(photoFiles).length && !$('#cWeight').value) return toast('Přidej fotky nebo váhu');
+  if (!Object.keys(photoFiles).length && !$('#cWeight').value) return toast('Přidej fotky nebo váhu', 2600, 'think');
   const fd = new FormData();
   fd.append('date', $('#cDate').value || today());
   fd.append('weight', $('#cWeight').value.replace(',', '.'));
   fd.append('waist', $('#cWaist').value.replace(',', '.'));
   fd.append('note', $('#cNote').value);
   for (const [a, b] of Object.entries(photoFiles)) fd.append(a, b, a + '.jpg');
-  $('#cSave').disabled = true; $('#cSave').textContent = 'Nahrávám a analyzuju… (~30 s)';
+  $('#cSave').disabled = true; $('#cSave').textContent = 'Fitko analyzuje fotky… (~30 s)'; setMood('think');
   try {
     const r = await api('/checkin', { method: 'POST', body: fd });
-    if (r.error) toast('Uloženo, analýza selhala: ' + r.error, 5000); else toast('✅ Check-in uložen');
+    if (r.error) toast('Uloženo, analýza selhala: ' + r.error, 5000, 'think'); else { toast('Check-in uložen, analýza je v chatu'); setMood('happy', 4000); }
     for (const k of Object.keys(photoFiles)) delete photoFiles[k];
     $$('.ph img').forEach(i => i.remove()); $$('.ph input').forEach(i => i.value = '');
     ['#cWeight', '#cWaist', '#cNote'].forEach(s => $(s).value = '');
     await load();
     if (r.analysis) go('chat');
-  } catch (e) { toast('Chyba: ' + e.message, 5000); }
+  } catch (e) { toast('Chyba: ' + e.message, 5000, 'think'); }
   $('#cSave').disabled = false; $('#cSave').textContent = 'Uložit a analyzovat';
 };
 function renderTrend() {
@@ -417,7 +649,7 @@ function renderProfile() {
 }
 $('#pSave').onclick = async () => {
   const p = {}; $$('[data-pk]').forEach(i => { if (i.value.trim()) p[i.dataset.pk] = i.value.trim(); });
-  await api('/profile', { method: 'PUT', body: p }); S.profile = p; toast('✅ Profil uložen');
+  await api('/profile', { method: 'PUT', body: p }); S.profile = p; toast('Profil uložen');
 };
 
 /* ---------- boot ---------- */

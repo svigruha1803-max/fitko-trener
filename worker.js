@@ -203,6 +203,22 @@ async function handleCheckin(req, env) {
   return json(req, { id, photos, analysis, error });
 }
 
+async function handleSwap(req, env) {
+  const { exercise, day_name, reason, current } = await req.json();
+  if (!exercise) return json(req, { error: 'chybí cvik' }, 400);
+  const { ctx } = await buildContext(env);
+  const prompt = `Uživatel dnes nechce/nemůže cvičit "${exercise.name}" (${exercise.sets || '?'}× ${exercise.reps || '?'}) v tréninku "${day_name || '-'}".
+Důvod: ${reason || 'neuveden'}.
+Ostatní cviky v tomto tréninku: ${(current || []).filter(n => n !== exercise.name).join(', ') || '-'}.
+Navrhni 3 náhrady do plně vybavené posilovny, které cílí na stejné svaly/pohybový vzor, respektují důvod (bolest → šetrnější varianta, obsazený stroj → jiné vybavení) a neduplikují ostatní cviky.
+Odpověz POUZE JSON polem bez dalšího textu: [{"name":"...","sets":3,"reps":"8-10","rest":"2 min","note":"krátký tip k technice","why":"proč je to vhodná náhrada (1 věta)"}]`;
+  const txt = await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: prompt }], 1000);
+  const mm = txt.match(/\[[\s\S]*\]/);
+  let options = [];
+  try { options = JSON.parse(mm ? mm[0] : txt); } catch { return json(req, { error: 'AI vrátila neplatný formát', raw: txt.slice(0, 300) }, 502); }
+  return json(req, { options: options.slice(0, 3) });
+}
+
 export default {
   async fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
@@ -233,6 +249,7 @@ export default {
         return json(req, { ok: true });
       }
       if (p === '/checkin' && req.method === 'POST') return await handleCheckin(req, env);
+      if (p === '/swap' && req.method === 'POST') return await handleSwap(req, env);
       let m;
       if ((m = p.match(/^\/checkin\/(\d+)$/)) && req.method === 'DELETE') {
         const c = await env.DB.prepare('SELECT photos FROM checkins WHERE id=?').bind(+m[1]).first();
