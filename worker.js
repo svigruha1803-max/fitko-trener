@@ -1,6 +1,7 @@
 // Mattyho fitko robůtek — Cloudflare Worker
 // Bindings: DB (D1), PHOTOS (KV), AI_SVC (service -> plavecky-csps-scraper, POST /ai)
-// Secrets: APP_PASSWORD, AI_KEY (sent to plavecky /ai)
+// Secrets: APP_PASSWORD, AI_KEY (sent to plavecky /ai), VAPID_PRIVATE (JWK); vars: VAPID_PUBLIC
+// Cron: daily 17:00 UTC → attendance nag push; Sunday 18:00 UTC → weekly summary
 const MODEL = 'claude-sonnet-4-6';
 
 const SCHEMA = [
@@ -9,6 +10,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS workouts (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, day_name TEXT, data TEXT, note TEXT, created TEXT)`,
   `CREATE TABLE IF NOT EXISTS chat (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, content TEXT, created TEXT)`,
   `CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT, created TEXT)`,
+  `CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, p256dh TEXT, auth TEXT, created TEXT)`,
 ];
 let schemaReady = false;
 async function ensureSchema(env) {
@@ -203,6 +205,121 @@ async function handleCheckin(req, env) {
   return json(req, { id, photos, analysis, error });
 }
 
+/* ---------- Web Push (RFC 8291 aes128gcm + RFC 8292 VAPID), WebCrypto only ---------- */
+const b64uEnc = buf => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const b64uDec = str => { const s = str.replace(/-/g, '+').replace(/_/g, '/'); const p = s + '='.repeat((4 - s.length % 4) % 4); return Uint8Array.from(atob(p), c => c.charCodeAt(0)); };
+const te = new TextEncoder();
+const concat = (...arrs) => { const n = arrs.reduce((a, x) => a + x.length, 0); const o = new Uint8Array(n); let i = 0; for (const x of arrs) { o.set(x, i); i += x.length; } return o; };
+async function hkdf(salt, ikm, info, len) {
+  const k = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, k, len * 8));
+}
+async function vapidAuth(endpoint, env) {
+  const aud = new URL(endpoint).origin;
+  const jwk = JSON.parse(env.VAPID_PRIVATE);
+  const key = await crypto.subtle.importKey('jwk', { ...jwk, ext: true }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const head = b64uEnc(te.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const body = b64uEnc(te.encode(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: env.VAPID_SUBJECT || 'mailto:fitko@example.com' })));
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, te.encode(head + '.' + body));
+  return `vapid t=${head}.${body}.${b64uEnc(sig)}, k=${env.VAPID_PUBLIC}`;
+}
+async function encryptPayload(sub, payload) {
+  const uaPub = b64uDec(sub.p256dh), auth = b64uDec(sub.auth);
+  const uaKey = await crypto.subtle.importKey('raw', uaPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const as = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const asPub = new Uint8Array(await crypto.subtle.exportKey('raw', as.publicKey));
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaKey }, as.privateKey, 256));
+  const ikm = await hkdf(auth, shared, concat(te.encode('WebPush: info\0'), uaPub, asPub), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, te.encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, te.encode('Content-Encoding: nonce\0'), 12);
+  const key = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, concat(te.encode(payload), new Uint8Array([2]))));
+  const rs = new Uint8Array([0, 0, 16, 0]);
+  return concat(salt, rs, new Uint8Array([asPub.length]), asPub, ct);
+}
+async function sendPush(env, sub, data) {
+  const body = await encryptPayload(sub, JSON.stringify(data));
+  const res = await fetch(sub.endpoint, {
+    method: 'POST',
+    headers: { 'Authorization': await vapidAuth(sub.endpoint, env), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', 'TTL': '86400', 'Urgency': 'normal' },
+    body,
+  });
+  return res.status;
+}
+
+const pragueDate = (d = new Date()) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+async function pushAll(env, data) {
+  const subs = (await env.DB.prepare('SELECT endpoint,p256dh,auth FROM push_subs').all()).results;
+  const out = [];
+  for (const sub of subs) {
+    try {
+      const st = await sendPush(env, sub, data);
+      if (st === 404 || st === 410) await env.DB.prepare('DELETE FROM push_subs WHERE endpoint=?').bind(sub.endpoint).run();
+      out.push(st);
+    } catch (e) { out.push('ERR ' + String(e.message || e).slice(0, 80)); }
+  }
+  return out;
+}
+const NAG = {
+  sad: ['Chybíš mi v posilovně.', 'Dnes by to chtělo trénink, ne?', 'Činky jsou smutné. Já taky.'],
+  angry: ['Myslíš, že se svaly postaví samy?', 'Gauč není cvik.', 'Ozvi se, nebo přidám přítahy navíc.', 'Tvoje činky volaly. Prý jsi nezvedal.'],
+};
+async function attendanceInfo(env) {
+  const profile = await getKV(env, 'profile', {});
+  const n = parseInt((String(profile.dni_tydne || '').match(/\d+/) || [])[0]) || 3;
+  const allowed = Math.ceil(7 / n);
+  const last = await env.DB.prepare('SELECT date FROM workouts ORDER BY date DESC LIMIT 1').first();
+  if (!last) return { level: 'none', n };
+  const gap = Math.round((new Date(pragueDate()) - new Date(last.date)) / 864e5);
+  return { gap, n, allowed, level: gap <= allowed ? 'ok' : gap <= allowed + 2 ? 'sad' : 'angry' };
+}
+async function dailyNag(env, force = false) {
+  const a = await attendanceInfo(env);
+  if (a.level !== 'sad' && a.level !== 'angry') return { skipped: a.level };
+  const today = pragueDate();
+  if (!force && (await getKV(env, 'last_nag')) === today) return { skipped: 'already' };
+  const pick = NAG[a.level][Math.floor(Math.random() * NAG[a.level].length)];
+  const title = a.level === 'angry' ? `Bráška je naštvaný (${a.gap} dní bez tréninku)` : `Bráška se ptá, kde jsi`;
+  const res = await pushAll(env, { title, body: pick, tag: 'nag', url: './?v=log' });
+  await setKV(env, 'last_nag', today);
+  return { sent: res, level: a.level };
+}
+const e1rm = (kg, reps) => (+kg || 0) * (1 + (+reps || 0) / 30);
+async function weeklySummary(env, push = true) {
+  const today = pragueDate();
+  const from = new Date(today); from.setDate(from.getDate() - 6);
+  const fromS = from.toISOString().slice(0, 10);
+  const all = (await env.DB.prepare('SELECT date,day_name,data,note FROM workouts ORDER BY date ASC').all()).results.map(w => ({ ...w, data: JSON.parse(w.data || '[]') }));
+  const week = all.filter(w => w.date >= fromS), before = all.filter(w => w.date < fromS);
+  const bestBefore = {};
+  for (const w of before) for (const e of w.data) for (const s of e.sets) bestBefore[e.name] = Math.max(bestBefore[e.name] || 0, e1rm(s.kg, s.reps));
+  const prs = [], perEx = {};
+  let vol = 0, sets = 0;
+  for (const w of week) for (const e of w.data) for (const s of e.sets) {
+    vol += (+s.kg || 0) * (+s.reps || 0); sets++;
+    const v = e1rm(s.kg, s.reps);
+    if (bestBefore[e.name] && v > bestBefore[e.name] + .01 && (!perEx[e.name] || v > perEx[e.name].v)) perEx[e.name] = { v, kg: s.kg, reps: s.reps };
+  }
+  for (const [name, x] of Object.entries(perEx)) prs.push(`${name} ${x.kg}×${x.reps} (e1RM ${x.v.toFixed(1)} kg)`);
+  const ck = (await env.DB.prepare('SELECT date,weight,waist FROM checkins WHERE weight IS NOT NULL ORDER BY date DESC LIMIT 2').all()).results;
+  const profile = await getKV(env, 'profile', {});
+  const n = parseInt((String(profile.dni_tydne || '').match(/\d+/) || [])[0]) || 3;
+  const stats = `Období ${fromS} až ${today}. Tréninků: ${week.length} (cíl ${n}). Sérií: ${sets}. Objem: ${Math.round(vol)} kg.
+Tréninky: ${week.map(w => w.date + ' ' + (w.day_name || '')).join('; ') || 'žádné'}.
+Nové rekordy (e1RM, Epley): ${prs.join('; ') || 'žádné'}.
+Váha: ${ck.length ? ck.map(c => `${c.date} ${c.weight} kg${c.waist ? ', pas ' + c.waist + ' cm' : ''}`).join(' | ') : 'bez dat'}.
+Poznámky z tréninků: ${week.map(w => w.note).filter(Boolean).join(' | ') || '-'}.`;
+  const { ctx } = await buildContext(env);
+  const text = (await callAI(env, TRAINER_BASE + ctx, [{ role: 'user', content: `Napiš týdenní souhrn (max ~150 slov, bez Markdown nadpisů): 1) jak dopadl týden vs. cíl, 2) rekordy a pokrok, 3) jedna až dvě konkrétní úpravy na příští týden. Použij jen tato data, nic si nevymýšlej:\n${stats}` }], 900))
+    .replace(/<plan>[\s\S]*?<\/plan>|<profile>[\s\S]*?<\/profile>/g, '').trim();
+  await env.DB.prepare('INSERT INTO chat (role,content,created) VALUES (?,?,?)').bind('assistant', `🗓️ Týdenní souhrn (${fromS.slice(5).split('-').reverse().join('.')}–${today.slice(5).split('-').reverse().join('.')})\n\n${text}`, now()).run();
+  await setKV(env, 'last_summary', { date: today, text });
+  let sent = null;
+  if (push) sent = await pushAll(env, { title: `Týdenní souhrn: ${week.length}/${n} tréninků${prs.length ? ', ' + prs.length + '× rekord' : ''}`, body: text.slice(0, 140), tag: 'summary', url: './' });
+  return { text, sent, stats };
+}
+
 async function handleSwap(req, env) {
   const { exercise, day_name, reason, current } = await req.json();
   if (!exercise) return json(req, { error: 'chybí cvik' }, 400);
@@ -220,6 +337,13 @@ Odpověz POUZE JSON polem bez dalšího textu: [{"name":"...","sets":3,"reps":"8
 }
 
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      await ensureSchema(env);
+      if (/SUN|\* 1$|\* 7$/.test(event.cron) && !/\* \* \* \*$/.test(event.cron)) await weeklySummary(env, true);
+      else await dailyNag(env);
+    })());
+  },
   async fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
     const url = new URL(req.url);
@@ -250,6 +374,23 @@ export default {
       }
       if (p === '/checkin' && req.method === 'POST') return await handleCheckin(req, env);
       if (p === '/swap' && req.method === 'POST') return await handleSwap(req, env);
+      if (p === '/push/subscribe' && req.method === 'POST') {
+        const { subscription: sb } = await req.json();
+        if (!sb?.endpoint || !sb?.keys?.p256dh || !sb?.keys?.auth) return json(req, { error: 'bad subscription' }, 400);
+        await env.DB.prepare('INSERT INTO push_subs (endpoint,p256dh,auth,created) VALUES (?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth')
+          .bind(sb.endpoint, sb.keys.p256dh, sb.keys.auth, now()).run();
+        return json(req, { ok: true });
+      }
+      if (p === '/push/unsubscribe' && req.method === 'POST') {
+        const { endpoint } = await req.json();
+        await env.DB.prepare('DELETE FROM push_subs WHERE endpoint=?').bind(endpoint || '').run();
+        return json(req, { ok: true });
+      }
+      if (p === '/push/test' && req.method === 'POST') {
+        return json(req, { sent: await pushAll(env, { title: 'Bráška tě zdraví 💪', body: 'Upozornění fungují. Teď hurá do posilovny.', tag: 'test', url: './' }) });
+      }
+      if (p === '/push/nag' && req.method === 'POST') return json(req, await dailyNag(env, true));
+      if (p === '/summary' && req.method === 'POST') { const r = await weeklySummary(env, false); return json(req, { text: r.text }); }
       let m;
       if ((m = p.match(/^\/checkin\/(\d+)$/)) && req.method === 'DELETE') {
         const c = await env.DB.prepare('SELECT photos FROM checkins WHERE id=?').bind(+m[1]).first();
