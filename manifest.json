@@ -1,0 +1,17 @@
+{
+  "name": "Fitko robůtek – trenér Bráška",
+  "short_name": "Fitko",
+  "description": "Osobní AI fitness trenér: plán, log tréninků, check-iny a Bráška, který tě hlídá.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c0e13",
+  "theme_color": "#0c0e13",
+  "lang": "cs",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

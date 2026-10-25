@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#0c0e13">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fitko">
 <title>Fitko robůtek</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E💪%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -150,6 +156,9 @@ header .who span.mad{color:var(--err)}
 @keyframes drop{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(14px);opacity:0}}
 .mascot.angry.bounce{animation:stomp .6s ease-in-out infinite}
 @keyframes stomp{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px) rotate(-1deg)}}
+#offline{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:#3a2a10;color:#ffd38a;text-align:center;font-size:12px;padding:3px 8px}
+body.is-offline #offline{display:block}
+body.is-offline header{top:20px}
 /* rest timer */
 #timer{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom));z-index:30;display:none;align-items:center;gap:10px;background:rgba(22,26,34,.96);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:18px;padding:8px 8px 8px 14px;box-shadow:0 10px 30px rgba(0,0,0,.5);overflow:hidden;min-width:280px;animation:pop .25s ease}
 #timer .tm-bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:rgba(255,255,255,.06)}
@@ -192,6 +201,7 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
 </head>
 <body>
 <div id="toast"></div>
+<div id="offline">Offline · tréninky ukládám do telefonu</div>
 <div id="timer"><div class="tm-bar"><i id="tmBar"></i></div><b id="tmTime">0:00</b><span class="lbl" id="tmLabel">Pauza</span><button class="ghost" id="tmPlus">+30 s</button><button class="ghost" id="tmSkip">✕</button></div>
 <div id="go">
   <div class="top"><button class="ghost" id="goClose">✕ Ukončit</button><span class="mut" id="goStep"></span></div>
@@ -291,6 +301,13 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
       <p class="mut">Trenér si to doplňuje i sám z chatu.</p>
       <div id="profFields"></div>
       <div style="margin-top:10px"><button id="pSave" style="width:100%">Uložit profil</button></div>
+    </div>
+    <div class="card" id="notifCard">
+      <h2>Bráška tě hlídá</h2>
+      <p class="mut" id="notifInfo">Upozornění do telefonu: každý den v 18:00 zkontroluje docházku a když vynecháváš, ozve se. V neděli v 19:00 pošle týdenní souhrn.</p>
+      <div class="row" style="margin-top:10px;flex-wrap:wrap"><button id="notifOn">Zapnout upozornění</button><button class="sec" id="notifTest">Zkušební</button></div>
+      <div class="row" style="margin-top:8px"><button class="sec" id="sumNow">Souhrn týdne teď</button><button class="sec" id="installBtn" style="display:none">Nainstalovat appku</button></div>
+      <p class="mut" id="iosHint" style="display:none;margin-top:8px">Na iPhonu: v Safari klepni na Sdílet → <b>Přidat na plochu</b>, otevři Fitko z plochy a pak zapni upozornění.</p>
     </div>
     <div class="card">
       <h2>Nastavení</h2>
@@ -488,7 +505,14 @@ $('#pw').onkeydown = e => { if (e.key === 'Enter') $('#loginBtn').click(); };
 $('#logout').onclick = () => { try { localStorage.removeItem('fitko_pw'); } catch (e) {} PW = ''; showLogin(); };
 
 async function load() {
-  S = await api('/state');
+  try { S = await api('/state'); try { localStorage.setItem('fitko_state', JSON.stringify(S)); } catch (e) {} }
+  catch (e) {
+    if (e.message === 'unauthorized') throw e;
+    let cached = null; try { cached = JSON.parse(localStorage.getItem('fitko_state') || 'null'); } catch (_) {}
+    if (!cached) throw e;
+    S = cached; document.body.classList.add('is-offline');
+  }
+  mergeQueue();
   $('#login').style.display = 'none'; $('#app').style.display = 'block';
   renderAll();
 }
@@ -649,8 +673,8 @@ function renderLog() {
   $('#wDay').innerHTML = `<option value="">— vlastní —</option>` + days.map((d, i) => `<option value="${i}">${esc(d.name)}</option>`).join('');
   if (cur !== '' && days[cur]) $('#wDay').value = cur;
   if (!W.length) loadDay(); else { renderLast(); renderEx(); }
-  $('#wHist').innerHTML = S.workouts.map(w => `<div class="hist"><div class="row"><b style="flex:1">${w.date.split('-').reverse().join('.')} ${esc(w.day_name)}</b><button class="ghost" data-dw="${w.id}">smazat</button></div>${(w.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${e.sets.filter(s => s.reps).map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</span></div>`).join('')}${w.note ? `<div class="mut">${esc(w.note)}</div>` : ''}</div>`).join('') || '<p class="mut">Zatím nic.</p>';
-  $$('[data-dw]').forEach(b => b.onclick = async () => { if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'opravdu?'; return; } await api('/workout/' + b.dataset.dw, { method: 'DELETE' }); S.workouts = S.workouts.filter(w => w.id != b.dataset.dw); renderLog(); });
+  $('#wHist').innerHTML = S.workouts.map(w => `<div class="hist"><div class="row"><b style="flex:1">${w.date.split('-').reverse().join('.')} ${esc(w.day_name)}${w.pending ? ' <span class="pr-badge" style="background:#ffd38a">čeká na nahrání</span>' : ''}</b><button class="ghost" data-dw="${w.id}">smazat</button></div>${(w.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${e.sets.filter(s => s.reps).map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</span></div>`).join('')}${w.note ? `<div class="mut">${esc(w.note)}</div>` : ''}</div>`).join('') || '<p class="mut">Zatím nic.</p>';
+  $$('[data-dw]').forEach(b => b.onclick = async () => { if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'opravdu?'; return; } if (String(b.dataset.dw).startsWith('q')) setQ(getQ().filter(x => x.tmp !== b.dataset.dw)); else await api('/workout/' + b.dataset.dw, { method: 'DELETE' }); S.workouts = S.workouts.filter(w => w.id != b.dataset.dw); renderLog(); });
   renderProgress();
 }
 $('#wDay').onchange = loadDay;
@@ -664,10 +688,11 @@ async function saveWorkout() {
   $('#wSave').disabled = true;
   const prs = findPRs(ex);
   let ok = false;
+  if (!navigator.onLine) { queueWorkout(body, ex); $('#wSave').disabled = false; return true; }
   try { const r = await api('/workout', { method: 'POST', body }); S.workouts.unshift({ id: r.id, ...body, data: ex }); W = []; $('#wNote').value = ''; loadDay(); renderLog(); renderCoach(); ok = true;
     if (prs.length) { confetti(); setMood('happy', 6000); toast('Nový rekord! ' + prs.map(p => `${p.name} ${p.kg}×${p.reps}`).join(', '), 6000); }
     else { toast('Trénink uložen. Dobrá práce!'); setMood('happy', 4000); } }
-  catch (e) { toast('Chyba: ' + e.message, 4000, 'think'); }
+  catch (e) { if (e instanceof TypeError) { queueWorkout(body, ex); ok = true; } else toast('Chyba: ' + e.message, 4000, 'think'); }
   $('#wSave').disabled = false;
   return ok;
 }
@@ -841,6 +866,67 @@ function renderGo() {
   $('#goSwap').onclick = () => { SW[G.i] = SW[G.i] ? null : { state: 'ask' }; renderGo(); };
 }
 
+/* ---------- offline queue ---------- */
+const QK = 'fitko_queue';
+const getQ = () => { try { return JSON.parse(localStorage.getItem(QK) || '[]'); } catch (e) { return []; } };
+const setQ = q => { try { localStorage.setItem(QK, JSON.stringify(q)); } catch (e) {} };
+function queueWorkout(body, ex) {
+  const q = getQ(); const tmp = 'q' + Date.now(); q.push({ tmp, body }); setQ(q);
+  S.workouts.unshift({ id: tmp, ...body, data: ex, pending: true });
+  try { localStorage.setItem('fitko_state', JSON.stringify(S)); } catch (e) {}
+  W = []; $('#wNote').value = ''; loadDay(); renderLog(); renderCoach();
+  toast('Bez signálu – trénink je uložený v telefonu, nahraju ho později.', 4500, 'think');
+}
+function mergeQueue() { const q = getQ(); for (const it of q) if (!S.workouts.some(w => w.id === it.tmp)) S.workouts.unshift({ id: it.tmp, ...it.body, data: it.body.exercises, pending: true }); S.workouts.sort((a, b) => b.date.localeCompare(a.date)); }
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !navigator.onLine || !PW) return; const q = getQ(); if (!q.length) return;
+  flushing = true; let done = 0;
+  for (const it of q.slice()) {
+    try { const r = await api('/workout', { method: 'POST', body: it.body }); const w = S.workouts.find(x => x.id === it.tmp); if (w) { w.id = r.id; delete w.pending; } setQ(getQ().filter(x => x.tmp !== it.tmp)); done++; }
+    catch (e) { break; }
+  }
+  flushing = false;
+  if (done) { toast(`Nahráno ${done} ${done === 1 ? 'offline trénink' : 'offline tréninky'}.`, 3000, 'happy'); try { S = await api('/state'); localStorage.setItem('fitko_state', JSON.stringify(S)); } catch (e) {} mergeQueue(); renderAll(); }
+}
+window.addEventListener('online', () => { document.body.classList.remove('is-offline'); flushQueue(); });
+window.addEventListener('offline', () => document.body.classList.add('is-offline'));
+
+/* ---------- PWA + push ---------- */
+const VAPID_PUBLIC = 'BN073y3UH6-QAtlCEXUbzyw6ZA5rcJWPOV1BHpLI--8Hh7knSafD6JxDtPasz5k24TpPgy8jpHFCX1TNlo17EC0';
+let swReg = null, deferredInstall = null;
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(r => { swReg = r; updateNotifUI(); }).catch(() => {});
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('#installBtn').style.display = ''; });
+$('#installBtn').onclick = async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $('#installBtn').style.display = 'none'; };
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+function b64uToU8(s) { const p = s.replace(/-/g, '+').replace(/_/g, '/'); const b = atob(p + '='.repeat((4 - p.length % 4) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+async function updateNotifUI() {
+  if (isIOS && !standalone) $('#iosHint').style.display = '';
+  if (!('PushManager' in window) || !('Notification' in window)) { $('#notifOn').disabled = true; $('#notifOn').textContent = 'Tento prohlížeč neumí upozornění'; return; }
+  const sub = swReg && await swReg.pushManager.getSubscription();
+  $('#notifOn').textContent = sub ? 'Upozornění jsou zapnutá ✓' : (Notification.permission === 'denied' ? 'Upozornění zakázána v prohlížeči' : 'Zapnout upozornění');
+  $('#notifOn').dataset.on = sub ? '1' : '0';
+}
+$('#notifOn').onclick = async () => {
+  try {
+    if (!swReg) swReg = await navigator.serviceWorker.ready;
+    if ($('#notifOn').dataset.on === '1') { const sub = await swReg.pushManager.getSubscription(); if (sub) { await api('/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } }); await sub.unsubscribe(); } toast('Upozornění vypnuta', 2500, 'sad'); return updateNotifUI(); }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Bez povolení ti Bráška nemůže psát.', 3500, 'sad'); return updateNotifUI(); }
+    const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToU8(VAPID_PUBLIC) });
+    await api('/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } });
+    toast('Hotovo! Bráška tě teď hlídá.', 3000, 'happy'); setMood('happy', 3000);
+  } catch (e) { toast('Nepovedlo se: ' + e.message, 4000, 'think'); }
+  updateNotifUI();
+};
+$('#notifTest').onclick = async () => { try { const r = await api('/push/test', { method: 'POST' }); toast(r.sent.length ? 'Odesláno – mrkni na upozornění' : 'Nejdřív zapni upozornění', 3000, r.sent.length ? 'happy' : 'think'); } catch (e) { toast('Chyba: ' + e.message, 3000, 'think'); } };
+$('#sumNow').onclick = async () => {
+  $('#sumNow').disabled = true; $('#sumNow').textContent = 'Bráška počítá…'; setMood('think');
+  try { await api('/summary', { method: 'POST' }); S = await api('/state'); renderAll(); go('chat'); setMood('happy', 3000); }
+  catch (e) { toast('Chyba: ' + e.message, 4000, 'think'); setMood(baseMood()); }
+  $('#sumNow').disabled = false; $('#sumNow').textContent = 'Souhrn týdne teď';
+};
+
 /* ---------- check-in ---------- */
 const photoFiles = {};
 const blobCache = {};
@@ -940,8 +1026,9 @@ $('#pSave').onclick = async () => {
 };
 
 /* ---------- boot ---------- */
-go('chat');
-if (PW) load().catch(e => { if (e.message !== 'unauthorized') showLogin('Chyba spojení: ' + e.message); }); else showLogin();
+go(new URLSearchParams(location.search).get('v') === 'log' ? 'log' : 'chat');
+if (!navigator.onLine) document.body.classList.add('is-offline');
+if (PW) load().then(() => { flushQueue(); if (new URLSearchParams(location.search).get('v') === 'log') go('log'); }).catch(e => { if (e.message !== 'unauthorized') showLogin('Chyba spojení: ' + e.message); }); else showLogin();
 </script>
 </body>
 </html>
