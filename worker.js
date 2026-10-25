@@ -1,6 +1,6 @@
 // Mattyho fitko robůtek — Cloudflare Worker
 // Bindings: DB (D1), PHOTOS (KV), AI_SVC (service -> plavecky-csps-scraper, POST /ai)
-// Secret: APP_PASSWORD
+// Secrets: APP_PASSWORD, AI_KEY (sent to plavecky /ai)
 const MODEL = 'claude-sonnet-4-6';
 
 const SCHEMA = [
@@ -57,7 +57,7 @@ async function latestPlan(env) {
 async function callAI(env, system, messages, max_tokens = 3000) {
   const body = JSON.stringify({ model: MODEL, max_tokens, system, messages });
   const res = await env.AI_SVC.fetch('https://ai-svc/ai', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-App-Key': env.AI_KEY || '' }, body,
   });
   const txt = await res.text();
   if (!res.ok) throw new Error('AI ' + res.status + ': ' + txt.slice(0, 300));
