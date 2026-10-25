@@ -97,13 +97,48 @@ async function photoBlocks(env, photos, label) {
   return out;
 }
 
+/* ---------- Ověřená znalostní báze (KB) — jediný povolený zdroj odborných tvrzení ----------
+   Každé tvrzení ověřeno z primárního textu / oficiální stránky časopisu (rešerše 2026-10-25). */
+const KB_SOURCES = {
+  S1: { short: 'ACSM 2026', cite: 'Currier BS, D’Souza AC, Singh MAF, … Schoenfeld BJ, … Phillips SM. American College of Sports Medicine Position Stand. Resistance Training Prescription for Muscle Function, Hypertrophy, and Physical Performance in Healthy Adults: An Overview of Reviews. Med Sci Sports Exerc. 2026;58(4):851–872.', url: 'https://doi.org/10.1249/MSS.0000000000003897' },
+  S2: { short: 'ACSM 2009', cite: 'American College of Sports Medicine. Position Stand: Progression Models in Resistance Training for Healthy Adults. Med Sci Sports Exerc. 2009 (březen). Nahrazeno ACSM 2026 tam, kde se liší.', url: 'https://www.sportgeneeskunde.com/wp-content/uploads/ACSM-Position-Stand-Progression-Models-in-Resistance-Training-for-Healthy-Adults.pdf' },
+  S3: { short: 'Schoenfeld 2017', cite: 'Schoenfeld BJ, Ogborn D, Krieger JW. Dose-response relationship between weekly resistance training volume and increases in muscle mass: A systematic review and meta-analysis. J Sports Sci. 2017 (online 2016).', url: 'https://doi.org/10.1080/02640414.2016.1210197' },
+  S4: { short: 'Morton 2018', cite: 'Morton RW, Murphy KT, McKellar SR, Schoenfeld BJ, Henselmans M, Helms E, Aragon AA, Devries MC, Banfield L, Krieger JW, Phillips SM. A systematic review, meta-analysis and meta-regression of the effect of protein supplementation on resistance training-induced gains in muscle mass and strength in healthy adults. Br J Sports Med. 2018;52(6):376.', url: 'https://bjsm.bmj.com/content/52/6/376' },
+  S5: { short: 'ISSN 2017', cite: 'Jäger R, et al. International Society of Sports Nutrition Position Stand: protein and exercise. J Int Soc Sports Nutr. 2017;14:20.', url: 'https://doi.org/10.1186/s12970-017-0177-8' },
+  S6: { short: 'Schumann 2022', cite: 'Schumann M, Feuerbacher JF, Sünkeler M, Freitag N, Rønnestad BR, Doma K, Lundberg TR. Compatibility of Concurrent Aerobic and Strength Training for Skeletal Muscle Size and Function: An Updated Systematic Review and Meta-Analysis. Sports Med. 2022;52:601–612.', url: 'https://doi.org/10.1007/s40279-021-01587-7' },
+  S7: { short: 'Helms 2014', cite: 'Helms ER, Aragon AA, Fitschen PJ. Evidence-based recommendations for natural bodybuilding contest preparation: nutrition and supplementation. J Int Soc Sports Nutr. 2014;11:20.', url: 'https://doi.org/10.1186/1550-2783-11-20' },
+};
+const KB = [
+  { id: 'K1', src: 'S1', t: 'Základ pro zdravé dospělé: trénovat všechny hlavní svalové skupiny aspoň 2× týdně s vysokým úsilím a postupně přidávat zátěž. Největší skok přináší přechod od žádného k jakémukoli silovému tréninku; konzistence je důležitější než dokonalost.' },
+  { id: 'K2', src: 'S1', t: 'Síla: zátěž kolem ≥80 % 1RM (vztah dávka–odpověď) a 2–3 série na cvik; nad 2–3 série na cvik se přínos pro sílu oplošťuje. Frekvence 2+ tréninků týdně sílu zlepšuje (horní hranici nelze určit, efekt slábne při vyrovnaném objemu).' },
+  { id: 'K3', src: 'S1', t: 'Hypertrofie: aspoň 10 sérií na svalovou skupinu týdně (vztah dávka–odpověď); meta-regrese citovaná v ACSM ukazuje klesající přínos zhruba u 18–20 sérií týdně. Kvalita důkazů pro objem a hypertrofii je střední (QoE 50 %).' },
+  { id: 'K4', src: 'S1', t: 'Hypertrofie: zátěž od nízké (~30 % 1RM) po vysokou (~100 % 1RM) vede k podobnému růstu svalu, pokud je úsilí vysoké.' },
+  { id: 'K5', src: 'S1', t: 'Trénink do svalového selhání není nutný – nezlepšil sílu, hypertrofii ani výbušnost. Pro hypertrofii ACSM navrhuje přibližně 2–3 opakování v rezervě (RIR), ale uvádí, že přesný cíl RIR nelze z důkazů kvantifikovat.' },
+  { id: 'K6', src: 'S1', t: 'Frekvence: při stejném týdenním objemu nemá vyšší frekvence na hypertrofii vliv; rozložení sérií do více dní je tedy otázka praktičnosti.' },
+  { id: 'K7', src: 'S1', t: 'Stroje vs. volné váhy: na sílu bez rozdílu (u hypertrofie nelze určit). Periodizace nebyla prokazatelně lepší než neperiodizovaný program s progresivním přetížením.' },
+  { id: 'K8', src: 'S1', t: 'Plný rozsah pohybu zlepšuje sílu (u hypertrofie nelze určit). Těžší nebo prioritní cviky patří na začátek tréninku. Excentrický důraz/přetížení má pozitivní vliv na hypertrofii.' },
+  { id: 'K9', src: 'S1', t: 'Pauzy mezi sériemi: krátké (<1 min) vs. delší (>1 min) neměly vliv na sílu; pro hypertrofii nelze vliv pauz určit (nízká kvalita důkazů).' },
+  { id: 'K10', src: 'S2', t: 'Starší doporučení ACSM 2009: pauzy 3–5 min pro sílu (středně pokročilí a pokročilí) a 1–2 min pro hypertrofii; tempo 1–2 s v koncentrické i excentrické fázi. ACSM 2026 vliv pauz nepotvrdil, ber jako praktické vodítko.' },
+  { id: 'K11', src: 'S2', t: 'Progrese zátěže (ACSM 2009): zvýšit zátěž o 2–10 %, když zvládneš současnou zátěž o 1–2 opakování nad cílový počet. ACSM 2026: progrese není nutná pro základní přínos, ale pro dlouhodobé zisky je progresivní přetížení potřeba.' },
+  { id: 'K12', src: 'S2', t: 'ACSM 2009 podle úrovně: frekvence začátečník 2–3, středně pokročilý 3–4, pokročilý 4–5 dní týdně; hypertrofie zátěž 1–12 RM s důrazem na 6–12 RM ve více sériích; začátečník síla 8–12 RM.' },
+  { id: 'K13', src: 'S3', t: 'Každá další týdenní série byla spojena s nárůstem svalu o ~0,37 %. Kategorie <5 / 5–9 / 10+ sérií týdně: ES 0,31 / 0,38 / 0,52 – trend mezi kategoriemi ale nebyl statisticky významný (p = 0,074) a po vyřazení jedné studie zeslábl; horní hranice nejasná (málo studií nad 12 sérií).' },
+  { id: 'K14', src: 'S4', t: 'Bílkoviny: nad ~1,62 g/kg/den (95% CI 1,03–2,20) nebyl další přírůstek beztukové hmoty pozorován; kvůli širokému intervalu autoři pro maximální zisky navrhují až ~2,2 g/kg/den. Suplementace přidala v průměru +0,30 kg beztukové hmoty a +2,49 kg na 1RM.' },
+  { id: 'K15', src: 'S5', t: 'ISSN: 1,4–2,0 g bílkovin/kg/den pro většinu cvičících; na porci ~0,25 g/kg nebo 20–40 g, rozložit rovnoměrně zhruba po 3–4 h; při kalorickém deficitu u trénovaných 2,3–3,1 g/kg/den.' },
+  { id: 'K16', src: 'S6', t: 'Souběžný vytrvalostní trénink neomezoval hypertrofii ani maximální sílu; mírně tlumil explozivní sílu, a to hlavně když byly obě části v jednom tréninku do 20 min po sobě (při odstupu ≥3 h efekt nebyl).' },
+  { id: 'K17', src: 'S7', t: 'Hubnutí se zachováním svalů (doporučení pro přírodní kulturisty): úbytek 0,5–1 % tělesné hmotnosti týdně; bílkoviny 2,3–3,1 g/kg beztukové hmoty, tuky 15–30 % energie, zbytek sacharidy.' },
+];
+const KB_PROMPT = `\n\n=== ZNALOSTNÍ BÁZE (jediný povolený zdroj odborných tvrzení) ===\n` +
+  KB.map(k => `[${k.id}] (${KB_SOURCES[k.src].short}) ${k.t}`).join('\n') +
+  `\n\nPRAVIDLA CITACÍ: Každé odborné tvrzení (objem, zátěž, opakování, pauzy, frekvence, progrese, bílkoviny, hubnutí, kombinace s vytrvalostí) MUSÍ vycházet ze znalostní báze a mít za sebou značku ve tvaru [K3] (můžeš i [K2][K11]). Nikdy neuváděj čísla ani studie, které v bázi nejsou, a nevymýšlej citace. Pokud k otázce báze nic nemá, napiš výslovně „k tomu nemám ověřený zdroj“ a případnou radu označ jako obecnou trenérskou praxi. Konkrétní volba cviků a jejich pořadí je trenérská praxe – citovat ji nemusíš. Kde se ACSM 2009 a 2026 liší, má přednost 2026.`;
+
 const TRAINER_BASE = `Jsi "Fitko robůtek" — osobní live fitness trenér Mátyáse (plavecký trenér, chodí do plně vybavené posilovny). Piš česky, stručně, věcně, bez frází a bez emoji. Oslovuj tykáním.
-Principy: progresivní přetížení, dostatečný týdenní objem na partii, technika a regenerace, rozumná frekvence. Doporučení opírej o uznávané zdroje (ACSM position stands, meta-analýzy Schoenfeld et al.); když si nejsi jistý, řekni to. Nevymýšlej čísla ani studie.
+Principy: progresivní přetížení, dostatečný týdenní objem na partii, technika a regenerace, rozumná frekvence. Když si nejsi jistý, řekni to.
 Z fotek NEUVÁDĚJ procento tuku jako fakt — vizuální odhad z fotky je nepřesný; popisuj kvalitativní změny a ber ohled na rozdíly v osvětlení/pozici. Hlavní objektivní metriky: váha, obvod pasu, výkony v logu.
-Nejsi lékař: při bolesti, zranění nebo zdravotním problému doporuč odborníka.`;
+Nejsi lékař: při bolesti, zranění nebo zdravotním problému doporuč odborníka.` + KB_PROMPT;
 
 const PLAN_FORMAT = `Když se domluvíte na novém nebo upraveném plánu, přidej na konec odpovědi PŘESNĚ jeden blok:
-<plan>{"name":"...","goal":"...","days":[{"name":"A – Push","focus":"...","exercises":[{"name":"Bench press","sets":4,"reps":"6-8","rest":"2-3 min","note":"RIR 1-2"}]}],"progression":"pravidlo progrese"}</plan>
+<plan>{"name":"...","goal":"...","days":[{"name":"A – Push","focus":"...","exercises":[{"name":"Bench press","sets":4,"reps":"6-8","rest":"2-3 min","note":"RIR 1-2"}]}],"progression":"pravidlo progrese","evidence":["K2","K3","K11"]}</plan>
+Do "evidence" dej ID tvrzení ze znalostní báze, na kterých plán stojí.
 Bez bloku <plan>, pokud plán neměníš. Když se dozvíš trvalé info o uživateli (cíl, výška, věk, zkušenosti, zranění, počet dní v týdnu, délka tréninku), přidej blok <profile>{"klic":"hodnota"}</profile> jen se změněnými položkami. Bloky se uživateli nezobrazují.`;
 
 async function buildContext(env) {
@@ -416,6 +451,7 @@ export default {
       if (p === '/push/test' && req.method === 'POST') {
         return json(req, { sent: await pushAll(env, { title: 'Bráška tě zdraví 💪', body: 'Upozornění fungují. Teď hurá do posilovny.', tag: 'test', url: './' }) });
       }
+      if (p === '/kb' && req.method === 'GET') return json(req, { sources: KB_SOURCES, items: KB });
       if (p === '/usage' && req.method === 'GET') return json(req, await usageReport(env));
       if (p === '/usage/budget' && req.method === 'PUT') { const { usd } = await req.json(); await setKV(env, 'budget_usd', usd ? +usd : null); return json(req, { ok: true }); }
       if (p === '/push/nag' && req.method === 'POST') return json(req, await dailyNag(env, true));

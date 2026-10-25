@@ -166,6 +166,15 @@ body.is-offline header{top:20px}
 .bbar{height:10px;border-radius:6px;background:var(--card2);overflow:hidden}
 .bbar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--ok),var(--acc))}
 .bbar.over i{background:linear-gradient(90deg,var(--acc),var(--err))}
+.cite{display:inline-block;vertical-align:baseline;background:rgba(56,214,245,.12);border:1px solid rgba(56,214,245,.4);color:#8fe6ff;border-radius:6px;padding:0 6px;margin:0 1px;font:600 11px/18px "Outfit",sans-serif;cursor:pointer;box-shadow:none}
+.cite:hover{background:rgba(56,214,245,.22);filter:none}
+#citeSheet{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center}
+#citeSheet .sh{background:var(--card);border:1px solid var(--line);border-radius:20px 20px 0 0;max-width:620px;width:100%;padding:18px 18px calc(18px + env(safe-area-inset-bottom));animation:pop .25s ease;max-height:80vh;overflow:auto}
+#citeSheet .q{background:var(--card2);border-left:3px solid #38d6f5;border-radius:10px;padding:10px 12px;margin:10px 0;font-size:14px}
+#citeSheet a{color:#8fe6ff}
+.kbsrc{border-top:1px solid var(--line);padding:8px 0;font-size:13px}
+.kbsrc summary{cursor:pointer;font-weight:600}
+.kbsrc li{margin:6px 0 0 16px;color:var(--mut)}
 /* rest timer */
 #timer{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom));z-index:30;display:none;align-items:center;gap:10px;background:rgba(22,26,34,.96);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:18px;padding:8px 8px 8px 14px;box-shadow:0 10px 30px rgba(0,0,0,.5);overflow:hidden;min-width:280px;animation:pop .25s ease}
 #timer .tm-bar{position:absolute;left:0;bottom:0;height:3px;width:100%;background:rgba(255,255,255,.06)}
@@ -208,6 +217,7 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
 </head>
 <body>
 <div id="toast"></div>
+<div id="citeSheet"><div class="sh" id="citeBody"></div></div>
 <div id="offline">Offline · tréninky ukládám do telefonu</div>
 <div id="timer"><div class="tm-bar"><i id="tmBar"></i></div><b id="tmTime">0:00</b><span class="lbl" id="tmLabel">Pauza</span><button class="ghost" id="tmPlus">+30 s</button><button class="ghost" id="tmSkip">✕</button></div>
 <div id="go">
@@ -308,6 +318,11 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
       <p class="mut">Trenér si to doplňuje i sám z chatu.</p>
       <div id="profFields"></div>
       <div style="margin-top:10px"><button id="pSave" style="width:100%">Uložit profil</button></div>
+    </div>
+    <div class="card" id="kbCard">
+      <h2>Odborné zdroje</h2>
+      <p class="mut">Bráška smí odborná doporučení stavět jen na těchto ověřených zdrojích a u každého tvrzení ukáže, odkud je. Klepni na modrý štítek v chatu.</p>
+      <div id="kbList" style="margin-top:8px"></div>
     </div>
     <div class="card" id="usageCard">
       <h2>Čerpání AI</h2>
@@ -441,7 +456,9 @@ let S = { profile:{}, plan:null, checkins:[], workouts:[], chat:[] };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\[(K\d{1,2})\]/g, (m, k) => citeChip(k));
+let KBD = null; try { KBD = JSON.parse(localStorage.getItem('fitko_kb') || 'null'); } catch (e) {}
+function citeChip(k) { const it = KBD && KBD.items.find(x => x.id === k); const src = it && KBD.sources[it.src]; return `<button class="cite" data-k="${k}">${src ? esc(src.short) : k}</button>`; }
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
 function toast(t, ms = 2600, mood = 'happy') { const e = $('#toast'); e.innerHTML = `<div class="av">${mascot(mood, { head: true })}</div><span>${esc(t)}</span>`; e.style.display = 'flex'; clearTimeout(toast.t); toast.t = setTimeout(() => e.style.display = 'none', ms); }
 /* ---------- coach / mascot state ---------- */
@@ -515,7 +532,7 @@ async function api(path, opts = {}) {
 function showLogin(err) { $('#app').style.display = 'none'; $('#login').style.display = 'block'; $('#loginErr').textContent = err || ''; $('#loginMascot').innerHTML = mascot(err ? 'think' : 'idle', { cls: 'bounce' }); }
 $('#loginBtn').onclick = async () => {
   PW = $('#pw').value.trim();
-  try { await load(); try { localStorage.setItem('fitko_pw', PW); } catch (e) {} }
+  try { await load(); try { localStorage.setItem('fitko_pw', PW); } catch (e) {} loadKB(); }
   catch (e) { if (e.message !== 'unauthorized') $('#loginErr').textContent = 'Chyba: ' + e.message; }
 };
 $('#pw').onkeydown = e => { if (e.key === 'Enter') $('#loginBtn').click(); };
@@ -597,7 +614,7 @@ $('#clearChat').onclick = async () => { await api('/chat', { method: 'DELETE' })
 function renderPlan() {
   const p = S.plan;
   if (!p) { $('#planBox').innerHTML = `<div class="card hero" style="padding:24px">${mascot('think', { cls: 'bounce' })}<h2 style="margin-top:6px">Zatím žádný plán</h2><p class="mut">Domluv se se mnou v chatu a plán se sem uloží sám.</p><div style="margin-top:12px"><button id="askPlan">Postav mi plán</button></div></div>`; $('#askPlan').onclick = () => { go('chat'); $('#chatIn').value = 'Navrhni mi tréninkový plán do posilovny.'; sendChat(); }; return; }
-  $('#planBox').innerHTML = `<div class="card"><h2>${esc(p.name || 'Plán')}</h2>${p.goal ? `<p class="mut">Cíl: ${esc(p.goal)}</p>` : ''}${p.progression ? `<p class="mut" style="margin-top:4px">Progrese: ${esc(p.progression)}</p>` : ''}<p class="mut" style="margin-top:4px">Uloženo ${new Date(p.created).toLocaleDateString('cs-CZ')}</p></div>` +
+  $('#planBox').innerHTML = `<div class="card"><h2>${esc(p.name || 'Plán')}</h2>${p.goal ? `<p class="mut">Cíl: ${esc(p.goal)}</p>` : ''}${p.progression ? `<p class="mut" style="margin-top:4px">Progrese: ${esc(p.progression)}</p>` : ''}${(p.evidence || []).length ? `<p class="mut" style="margin-top:6px">Opírá se o: ${p.evidence.map(k => citeChip(k)).join(' ')}</p>` : ''}<p class="mut" style="margin-top:4px">Uloženo ${new Date(p.created).toLocaleDateString('cs-CZ')}</p></div>` +
     (p.days || []).map(d => `<div class="card day"><h3>${esc(d.name)}</h3>${d.focus ? `<p class="mut" style="margin-bottom:6px">${esc(d.focus)}</p>` : ''}<table><tr><th>Cvik</th><th>Série</th><th>Opak.</th><th>Pauza</th></tr>${(d.exercises || []).map(e => `<tr><td>${esc(e.name)}${e.note ? `<div class="mut">${esc(e.note)}</div>` : ''}</td><td>${esc(e.sets)}</td><td>${esc(e.reps)}</td><td>${esc(e.rest || '')}</td></tr>`).join('')}</table></div>`).join('');
 }
 
@@ -945,6 +962,26 @@ $('#sumNow').onclick = async () => {
   $('#sumNow').disabled = false; $('#sumNow').textContent = 'Souhrn týdne teď';
 };
 
+/* ---------- knowledge base / citations ---------- */
+async function loadKB() { try { KBD = await api('/kb'); localStorage.setItem('fitko_kb', JSON.stringify(KBD)); } catch (e) {} renderKB(); renderChat(); renderPlan(); }
+function renderKB() {
+  if (!KBD) { $('#kbList').innerHTML = '<p class="mut">Zdroje se načtou po připojení.</p>'; return; }
+  $('#kbList').innerHTML = Object.entries(KBD.sources).map(([sid, src]) => `<details class="kbsrc"><summary>${esc(src.short)}</summary><div class="mut" style="margin:6px 0">${esc(src.cite)} <a href="${esc(src.url)}" target="_blank" rel="noopener" style="color:#8fe6ff">zdroj ↗</a></div><ul>${KBD.items.filter(i => i.src === sid).map(i => `<li><b>${i.id}</b> ${esc(i.t)}</li>`).join('')}</ul></details>`).join('');
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.cite'); if (b) { e.preventDefault(); openCite(b.dataset.k); return; }
+  if (e.target.id === 'citeSheet') $('#citeSheet').style.display = 'none';
+});
+function openCite(k) {
+  const it = KBD && KBD.items.find(x => x.id === k);
+  if (!it) { toast('Zdroj ' + k + ' se nepodařilo najít', 2500, 'think'); return; }
+  const src = KBD.sources[it.src];
+  $('#citeBody').innerHTML = `<div class="row" style="justify-content:space-between"><b style="flex:1">${esc(src.short)} · ${k}</b><button class="ghost" style="flex:0 0 auto" onclick="document.getElementById('citeSheet').style.display='none'">✕</button></div>
+    <div class="q">${esc(it.t)}</div><div class="mut" style="font-size:12px">${esc(src.cite)}</div>
+    <div style="margin-top:10px"><a href="${esc(src.url)}" target="_blank" rel="noopener">Otevřít zdroj ↗</a></div>`;
+  $('#citeSheet').style.display = 'flex';
+}
+
 /* ---------- AI usage ---------- */
 const usd = v => '$' + (v < 1 ? v.toFixed(3) : v.toFixed(2));
 const KIND = { chat: 'Chat s trenérem', checkin: 'Analýza fotek', swap: 'Výměna cviku', summary: 'Týdenní souhrny' };
@@ -1069,7 +1106,7 @@ $('#pSave').onclick = async () => {
 /* ---------- boot ---------- */
 go(new URLSearchParams(location.search).get('v') === 'log' ? 'log' : 'chat');
 if (!navigator.onLine) document.body.classList.add('is-offline');
-if (PW) load().then(() => { flushQueue(); if (new URLSearchParams(location.search).get('v') === 'log') go('log'); }).catch(e => { if (e.message !== 'unauthorized') showLogin('Chyba spojení: ' + e.message); }); else showLogin();
+if (PW) load().then(() => { flushQueue(); loadKB(); if (new URLSearchParams(location.search).get('v') === 'log') go('log'); }).catch(e => { if (e.message !== 'unauthorized') showLogin('Chyba spojení: ' + e.message); }); else showLogin();
 </script>
 </body>
 </html>
