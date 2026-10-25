@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>💪 Mattyho fitko robůtek</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--card2:#20242d;--line:#2b303b;--tx:#e8eaef;--mut:#8b93a3;--acc:#ff7a1a;--acc2:#ffb067;--ok:#3ecf8e;--err:#ff5d5d}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:10px}
+header h1{font-size:17px;font-weight:700;flex:1}
+header small{color:var(--mut);font-size:12px}
+main{max-width:760px;margin:0 auto;padding:16px}
+.view{display:none}.view[data-active="1"]{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card h2{font-size:15px;margin-bottom:10px}
+.mut{color:var(--mut);font-size:13px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 4px}
+input,textarea,select{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:10px;padding:10px;font:inherit}
+textarea{resize:vertical;min-height:44px}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--acc);border-color:transparent}
+button{background:var(--acc);color:#111;border:0;border-radius:10px;padding:10px 14px;font:600 14px inherit;font-family:inherit;cursor:pointer}
+button.sec{background:var(--card2);color:var(--tx);border:1px solid var(--line)}
+button.ghost{background:none;color:var(--mut);padding:6px 8px}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+nav{position:fixed;bottom:0;left:0;right:0;z-index:6;background:#12151b;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav div{flex:1;text-align:center;padding:9px 0 8px;font-size:11px;color:var(--mut);cursor:pointer;user-select:none}
+nav div b{display:block;font-size:20px;line-height:1.1}
+nav div[data-active="1"]{color:var(--acc)}
+/* chat */
+#chatLog{display:flex;flex-direction:column;gap:8px;min-height:50vh;padding-bottom:90px}
+.msg{max-width:88%;padding:10px 12px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
+.msg.user{align-self:flex-end;background:var(--acc);color:#111;border-bottom-right-radius:4px}
+.msg.assistant{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg .t{display:block;font-size:10px;opacity:.6;margin-top:4px}
+#chatBar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line);padding:8px 16px;z-index:4}
+#chatBar .row{max-width:760px;margin:0 auto}
+#chatBar textarea{min-height:42px;max-height:140px}
+#chatBar button{flex:0 0 auto}
+.typing{color:var(--mut);font-size:13px;padding:4px 2px}
+.pill{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;margin:2px 4px 2px 0;cursor:pointer}
+/* plan */
+.day h3{font-size:14px;color:var(--acc2);margin-bottom:6px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase}
+/* workout */
+.ex{background:var(--card2);border-radius:10px;padding:10px;margin-bottom:8px}
+.ex .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600}
+.set{display:grid;grid-template-columns:28px 1fr 1fr 32px;gap:6px;align-items:center;margin-bottom:4px}
+.set span{color:var(--mut);font-size:12px;text-align:center}
+.set input{padding:8px}
+.hist{border-top:1px solid var(--line);padding:8px 0;font-size:13px}
+.hist:first-child{border-top:0}
+/* checkin */
+.ph{aspect-ratio:3/4;background:var(--card2);border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--mut);font-size:12px;cursor:pointer;overflow:hidden;position:relative}
+.ph img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.ph input{display:none}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
+.thumbs img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:var(--card2)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cmp img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:var(--card2)}
+.analysis{white-space:pre-wrap;font-size:14px;background:var(--card2);border-radius:10px;padding:10px;margin-top:6px}
+#toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);padding:9px 14px;border-radius:10px;z-index:20;display:none;font-size:14px}
+#login{max-width:360px;margin:18vh auto 0;padding:16px}
+svg text{fill:var(--mut);font-size:10px}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<div id="login" style="display:none">
+  <div class="card">
+    <h2>💪 Mattyho fitko robůtek</h2>
+    <label>Heslo</label>
+    <input id="pw" type="password" autocomplete="current-password">
+    <div style="margin-top:10px"><button id="loginBtn" style="width:100%">Přihlásit</button></div>
+    <p class="mut" id="loginErr" style="margin-top:8px"></p>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+<header><h1>💪 Fitko robůtek</h1><small id="hdrInfo"></small></header>
+<main>
+  <!-- TRENÉR -->
+  <section class="view" id="v-chat" data-active="1">
+    <div id="chatLog"></div>
+    <div class="typing" id="typing" style="display:none">Trenér píše…</div>
+  </section>
+
+  <!-- PLÁN -->
+  <section class="view" id="v-plan">
+    <div id="planBox"></div>
+  </section>
+
+  <!-- TRÉNINK -->
+  <section class="view" id="v-log">
+    <div class="card">
+      <h2>Zapsat trénink</h2>
+      <div class="row">
+        <div><label>Datum</label><input type="date" id="wDate"></div>
+        <div><label>Den plánu</label><select id="wDay"></select></div>
+      </div>
+      <div id="wEx" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:6px">
+        <input id="wNewEx" placeholder="Přidat cvik…">
+        <button class="sec" id="wAddEx" style="flex:0 0 auto">+ cvik</button>
+      </div>
+      <label>Poznámka (pocit, RPE, bolest…)</label>
+      <textarea id="wNote"></textarea>
+      <div style="margin-top:10px"><button id="wSave" style="width:100%">Uložit trénink</button></div>
+    </div>
+    <div class="card"><h2>Historie</h2><div id="wHist"></div></div>
+  </section>
+
+  <!-- CHECK-IN -->
+  <section class="view" id="v-check">
+    <div class="card">
+      <h2>Nový check-in</h2>
+      <p class="mut">Pokaždé stejné podmínky: ráno nalačno, stejné světlo, stejná vzdálenost a póza.</p>
+      <div class="grid3" style="margin-top:10px">
+        <label class="ph" data-a="front"><input type="file" accept="image/*" capture="environment">Zepředu</label>
+        <label class="ph" data-a="side"><input type="file" accept="image/*" capture="environment">Z boku</label>
+        <label class="ph" data-a="back"><input type="file" accept="image/*" capture="environment">Zezadu</label>
+      </div>
+      <div class="grid3">
+        <div><label>Datum</label><input type="date" id="cDate"></div>
+        <div><label>Váha (kg)</label><input type="number" step="0.1" inputmode="decimal" id="cWeight"></div>
+        <div><label>Pas (cm)</label><input type="number" step="0.5" inputmode="decimal" id="cWaist"></div>
+      </div>
+      <label>Poznámka</label><textarea id="cNote"></textarea>
+      <div style="margin-top:10px"><button id="cSave" style="width:100%">Uložit a analyzovat</button></div>
+    </div>
+    <div class="card" id="trendCard" style="display:none"><h2>Trend</h2><div id="trend"></div></div>
+    <div class="card" id="cmpCard" style="display:none">
+      <h2>Porovnání</h2>
+      <div class="row"><select id="cmpA"></select><select id="cmpB"></select><select id="cmpAngle" style="flex:0 0 100px"><option value="front">Zepředu</option><option value="side">Z boku</option><option value="back">Zezadu</option></select></div>
+      <div class="cmp" id="cmpImgs" style="margin-top:8px"></div>
+    </div>
+    <div id="cHist"></div>
+  </section>
+
+  <!-- PROFIL -->
+  <section class="view" id="v-prof">
+    <div class="card">
+      <h2>Profil</h2>
+      <p class="mut">Trenér si to doplňuje i sám z chatu.</p>
+      <div id="profFields"></div>
+      <div style="margin-top:10px"><button id="pSave" style="width:100%">Uložit profil</button></div>
+    </div>
+    <div class="card">
+      <h2>Nastavení</h2>
+      <div class="row"><button class="sec" id="clearChat">Smazat historii chatu</button><button class="sec" id="logout">Odhlásit</button></div>
+    </div>
+  </section>
+</main>
+
+<div id="chatBar">
+  <div class="row">
+    <textarea id="chatIn" rows="1" placeholder="Napiš trenérovi…"></textarea>
+    <button id="chatSend">➤</button>
+  </div>
+  <div style="max-width:760px;margin:4px auto 0" id="quick"></div>
+</div>
+
+<nav>
+  <div data-v="chat" data-active="1"><b>💬</b>Trenér</div>
+  <div data-v="plan"><b>📋</b>Plán</div>
+  <div data-v="log"><b>🏋️</b>Trénink</div>
+  <div data-v="check"><b>📸</b>Check-in</div>
+  <div data-v="prof"><b>⚙️</b>Profil</div>
+</nav>
+</div>
+
+<script>
+const WORKER_URL = 'https://fitko-trener.svigruha1803.workers.dev';
+let PW = '';
+try { PW = localStorage.getItem('fitko_pw') || ''; } catch (e) {}
+let S = { profile:{}, plan:null, checkins:[], workouts:[], chat:[] };
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+function toast(t, ms = 2500) { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => e.style.display = 'none', ms); }
+
+async function api(path, opts = {}) {
+  const headers = { 'Authorization': 'Bearer ' + PW, ...(opts.headers || {}) };
+  if (opts.body && !(opts.body instanceof FormData) && typeof opts.body !== 'string') { opts.body = JSON.stringify(opts.body); headers['Content-Type'] = 'application/json'; }
+  const r = await fetch(WORKER_URL + path, { ...opts, headers });
+  if (r.status === 401) { showLogin('Špatné heslo'); throw new Error('unauthorized'); }
+  const ct = r.headers.get('Content-Type') || '';
+  if (!ct.includes('json')) { if (!r.ok) throw new Error('HTTP ' + r.status); return r; }
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+
+/* ---------- login ---------- */
+function showLogin(err) { $('#app').style.display = 'none'; $('#login').style.display = 'block'; $('#loginErr').textContent = err || ''; }
+$('#loginBtn').onclick = async () => {
+  PW = $('#pw').value.trim();
+  try { await load(); try { localStorage.setItem('fitko_pw', PW); } catch (e) {} }
+  catch (e) { if (e.message !== 'unauthorized') $('#loginErr').textContent = 'Chyba: ' + e.message; }
+};
+$('#pw').onkeydown = e => { if (e.key === 'Enter') $('#loginBtn').click(); };
+$('#logout').onclick = () => { try { localStorage.removeItem('fitko_pw'); } catch (e) {} PW = ''; showLogin(); };
+
+async function load() {
+  S = await api('/state');
+  $('#login').style.display = 'none'; $('#app').style.display = 'block';
+  renderAll();
+}
+function renderAll() { renderChat(); renderPlan(); renderLog(); renderCheck(); renderProfile(); hdr(); }
+function hdr() {
+  const c = S.checkins[0];
+  $('#hdrInfo').textContent = c ? `${c.weight ?? '–'} kg · check-in ${c.date.slice(5).split('-').reverse().join('.')}` : '';
+}
+
+/* ---------- nav ---------- */
+$$('nav div').forEach(n => n.onclick = () => go(n.dataset.v));
+function go(v) {
+  $$('nav div').forEach(n => n.dataset.active = n.dataset.v === v ? '1' : '0');
+  $$('.view').forEach(s => s.dataset.active = s.id === 'v-' + v ? '1' : '0');
+  $('#chatBar').style.display = v === 'chat' ? 'block' : 'none';
+  if (v === 'chat') scrollChat();
+  window.scrollTo(0, v === 'chat' ? document.body.scrollHeight : 0);
+}
+
+/* ---------- chat ---------- */
+function renderChat() {
+  const log = $('#chatLog');
+  if (!S.chat.length) {
+    log.innerHTML = `<div class="msg assistant">Čau, jsem tvůj fitko trenér. Napiš mi, čeho chceš dosáhnout, a dej mi základní info (věk, výška, zkušenosti s posilovnou, zranění, kolikrát týdně a jak dlouho chceš trénovat). Pak nahraj první check-in s fotkami a navrhnu plán.</div>`;
+  } else {
+    log.innerHTML = S.chat.map(m => `<div class="msg ${m.role === 'user' ? 'user' : 'assistant'}">${fmt(m.content)}<span class="t">${m.created ? new Date(m.created).toLocaleString('cs-CZ', { day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit' }) : ''}</span></div>`).join('');
+  }
+  const q = ['Navrhni mi plán', 'Jak mám dnes trénovat?', 'Zhodnoť poslední týden', 'Uprav plán podle check-inu'];
+  $('#quick').innerHTML = q.map(t => `<span class="pill">${t}</span>`).join('');
+  $$('#quick .pill').forEach(p => p.onclick = () => { $('#chatIn').value = p.textContent; sendChat(); });
+  scrollChat();
+}
+function scrollChat() { requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight)); }
+async function sendChat() {
+  const t = $('#chatIn').value.trim(); if (!t) return;
+  $('#chatIn').value = ''; autoGrow();
+  S.chat.push({ role: 'user', content: t, created: new Date().toISOString() });
+  renderChat(); $('#typing').style.display = 'block'; $('#chatSend').disabled = true;
+  try {
+    const r = await api('/chat', { method: 'POST', body: { message: t } });
+    S.chat.push({ role: 'assistant', content: r.reply, created: new Date().toISOString() });
+    if (r.planSaved) { toast('📋 Plán aktualizován'); const st = await api('/state'); S.plan = st.plan; S.profile = st.profile; renderPlan(); renderLog(); renderProfile(); }
+    else { const st = await api('/state'); S.profile = st.profile; renderProfile(); }
+  } catch (e) { S.chat.push({ role: 'assistant', content: '⚠️ Chyba: ' + e.message }); }
+  $('#typing').style.display = 'none'; $('#chatSend').disabled = false; renderChat();
+}
+$('#chatSend').onclick = sendChat;
+$('#chatIn').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } };
+function autoGrow() { const t = $('#chatIn'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
+$('#chatIn').oninput = autoGrow;
+$('#clearChat').onclick = async () => { await api('/chat', { method: 'DELETE' }); S.chat = []; renderChat(); toast('Chat smazán'); };
+
+/* ---------- plan ---------- */
+function renderPlan() {
+  const p = S.plan;
+  if (!p) { $('#planBox').innerHTML = `<div class="card"><h2>Zatím žádný plán</h2><p class="mut">Domluv se s trenérem v chatu — plán se sem uloží automaticky.</p><div style="margin-top:10px"><button id="askPlan">Požádat o plán</button></div></div>`; $('#askPlan').onclick = () => { go('chat'); $('#chatIn').value = 'Navrhni mi tréninkový plán do posilovny.'; sendChat(); }; return; }
+  $('#planBox').innerHTML = `<div class="card"><h2>${esc(p.name || 'Plán')}</h2>${p.goal ? `<p class="mut">Cíl: ${esc(p.goal)}</p>` : ''}${p.progression ? `<p class="mut" style="margin-top:4px">Progrese: ${esc(p.progression)}</p>` : ''}<p class="mut" style="margin-top:4px">Uloženo ${new Date(p.created).toLocaleDateString('cs-CZ')}</p></div>` +
+    (p.days || []).map(d => `<div class="card day"><h3>${esc(d.name)}</h3>${d.focus ? `<p class="mut" style="margin-bottom:6px">${esc(d.focus)}</p>` : ''}<table><tr><th>Cvik</th><th>Série</th><th>Opak.</th><th>Pauza</th></tr>${(d.exercises || []).map(e => `<tr><td>${esc(e.name)}${e.note ? `<div class="mut">${esc(e.note)}</div>` : ''}</td><td>${esc(e.sets)}</td><td>${esc(e.reps)}</td><td>${esc(e.rest || '')}</td></tr>`).join('')}</table></div>`).join('');
+}
+
+/* ---------- workout log ---------- */
+let W = [];
+function lastSets(name) {
+  for (const w of S.workouts) { const e = (w.data || []).find(x => x.name.toLowerCase() === name.toLowerCase()); if (e) return e.sets.filter(s => s.reps); }
+  return [];
+}
+function loadDay() {
+  const idx = $('#wDay').value;
+  const d = S.plan?.days?.[idx];
+  W = d ? d.exercises.map(e => ({ name: e.name, target: `${e.sets}× ${e.reps}`, sets: Array.from({ length: +e.sets || 3 }, () => ({ kg: '', reps: '' })) })) : [];
+  renderEx();
+}
+function renderEx() {
+  $('#wEx').innerHTML = W.map((e, i) => {
+    const prev = lastSets(e.name);
+    return `<div class="ex"><div class="hd"><span>${esc(e.name)} <span class="mut">${esc(e.target || '')}</span></span><button class="ghost" data-rm="${i}">✕</button></div>
+    ${prev.length ? `<div class="mut" style="margin-bottom:6px">Minule: ${prev.map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</div>` : ''}
+    ${e.sets.map((s, j) => `<div class="set"><span>${j + 1}</span><input inputmode="decimal" placeholder="kg${prev[j] ? ' (' + prev[j].kg + ')' : ''}" value="${esc(s.kg)}" data-i="${i}" data-j="${j}" data-f="kg"><input inputmode="numeric" placeholder="opak.${prev[j] ? ' (' + prev[j].reps + ')' : ''}" value="${esc(s.reps)}" data-i="${i}" data-j="${j}" data-f="reps"><button class="ghost" data-rs="${i},${j}">–</button></div>`).join('')}
+    <button class="ghost" data-as="${i}">+ série</button></div>`;
+  }).join('') || '<p class="mut">Vyber den plánu nebo přidej cvik.</p>';
+  $$('#wEx input').forEach(inp => inp.oninput = () => { W[inp.dataset.i].sets[inp.dataset.j][inp.dataset.f] = inp.value.replace(',', '.'); });
+  $$('#wEx [data-rm]').forEach(b => b.onclick = () => { W.splice(+b.dataset.rm, 1); renderEx(); });
+  $$('#wEx [data-as]').forEach(b => b.onclick = () => { const e = W[+b.dataset.as]; const l = e.sets[e.sets.length - 1] || {}; e.sets.push({ kg: l.kg || '', reps: '' }); renderEx(); });
+  $$('#wEx [data-rs]').forEach(b => b.onclick = () => { const [i, j] = b.dataset.rs.split(',').map(Number); W[i].sets.splice(j, 1); renderEx(); });
+}
+function renderLog() {
+  if (!$('#wDate').value) $('#wDate').value = today();
+  const days = S.plan?.days || [];
+  const cur = $('#wDay').value;
+  $('#wDay').innerHTML = `<option value="">— vlastní —</option>` + days.map((d, i) => `<option value="${i}">${esc(d.name)}</option>`).join('');
+  if (cur !== '' && days[cur]) $('#wDay').value = cur;
+  if (!W.length) loadDay(); else renderEx();
+  $('#wHist').innerHTML = S.workouts.map(w => `<div class="hist"><div class="row"><b style="flex:1">${w.date.split('-').reverse().join('.')} ${esc(w.day_name)}</b><button class="ghost" data-dw="${w.id}">smazat</button></div>${(w.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${e.sets.filter(s => s.reps).map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</span></div>`).join('')}${w.note ? `<div class="mut">${esc(w.note)}</div>` : ''}</div>`).join('') || '<p class="mut">Zatím nic.</p>';
+  $$('[data-dw]').forEach(b => b.onclick = async () => { if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'opravdu?'; return; } await api('/workout/' + b.dataset.dw, { method: 'DELETE' }); S.workouts = S.workouts.filter(w => w.id != b.dataset.dw); renderLog(); });
+}
+$('#wDay').onchange = loadDay;
+$('#wAddEx').onclick = () => { const n = $('#wNewEx').value.trim(); if (!n) return; W.push({ name: n, sets: [{ kg: '', reps: '' }, { kg: '', reps: '' }, { kg: '', reps: '' }] }); $('#wNewEx').value = ''; renderEx(); };
+$('#wSave').onclick = async () => {
+  const ex = W.map(e => ({ name: e.name, sets: e.sets.filter(s => s.reps !== '').map(s => ({ kg: s.kg === '' ? 0 : +s.kg, reps: +s.reps })) })).filter(e => e.sets.length);
+  if (!ex.length) return toast('Vyplň aspoň jednu sérii');
+  const idx = $('#wDay').value;
+  const body = { date: $('#wDate').value, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', exercises: ex, note: $('#wNote').value };
+  $('#wSave').disabled = true;
+  try { const r = await api('/workout', { method: 'POST', body }); S.workouts.unshift({ id: r.id, ...body, data: ex }); W = []; $('#wNote').value = ''; loadDay(); renderLog(); toast('✅ Trénink uložen'); }
+  catch (e) { toast('Chyba: ' + e.message); }
+  $('#wSave').disabled = false;
+};
+
+/* ---------- check-in ---------- */
+const photoFiles = {};
+const blobCache = {};
+async function photoURL(key) {
+  if (!key) return '';
+  if (blobCache[key]) return blobCache[key];
+  const r = await api('/photo/' + encodeURIComponent(key));
+  return blobCache[key] = URL.createObjectURL(await r.blob());
+}
+async function resize(file, max = 1280) {
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  const s = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
+}
+$$('.ph').forEach(ph => {
+  const inp = ph.querySelector('input');
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    const b = await resize(f); photoFiles[ph.dataset.a] = b;
+    let im = ph.querySelector('img'); if (!im) { im = document.createElement('img'); ph.appendChild(im); }
+    im.src = URL.createObjectURL(b);
+  };
+});
+$('#cSave').onclick = async () => {
+  if (!Object.keys(photoFiles).length && !$('#cWeight').value) return toast('Přidej fotky nebo váhu');
+  const fd = new FormData();
+  fd.append('date', $('#cDate').value || today());
+  fd.append('weight', $('#cWeight').value.replace(',', '.'));
+  fd.append('waist', $('#cWaist').value.replace(',', '.'));
+  fd.append('note', $('#cNote').value);
+  for (const [a, b] of Object.entries(photoFiles)) fd.append(a, b, a + '.jpg');
+  $('#cSave').disabled = true; $('#cSave').textContent = 'Nahrávám a analyzuju… (~30 s)';
+  try {
+    const r = await api('/checkin', { method: 'POST', body: fd });
+    if (r.error) toast('Uloženo, analýza selhala: ' + r.error, 5000); else toast('✅ Check-in uložen');
+    for (const k of Object.keys(photoFiles)) delete photoFiles[k];
+    $$('.ph img').forEach(i => i.remove()); $$('.ph input').forEach(i => i.value = '');
+    ['#cWeight', '#cWaist', '#cNote'].forEach(s => $(s).value = '');
+    await load();
+    if (r.analysis) go('chat');
+  } catch (e) { toast('Chyba: ' + e.message, 5000); }
+  $('#cSave').disabled = false; $('#cSave').textContent = 'Uložit a analyzovat';
+};
+function renderTrend() {
+  const pts = S.checkins.filter(c => c.weight || c.waist).slice().reverse();
+  if (pts.length < 2) { $('#trendCard').style.display = 'none'; return; }
+  $('#trendCard').style.display = 'block';
+  const W_ = 700, H = 160, P = 28;
+  const line = (key, color) => {
+    const v = pts.map(p => p[key]).filter(x => x != null); if (v.length < 2) return '';
+    const mn = Math.min(...v), mx = Math.max(...v), r = (mx - mn) || 1;
+    const xy = pts.map((p, i) => p[key] == null ? null : [P + i * (W_ - 2 * P) / (pts.length - 1), H - P - (p[key] - mn) / r * (H - 2 * P)]).filter(Boolean);
+    return `<polyline fill="none" stroke="${color}" stroke-width="2.5" points="${xy.map(a => a.join(',')).join(' ')}"/>${xy.map(a => `<circle cx="${a[0]}" cy="${a[1]}" r="3.5" fill="${color}"/>`).join('')}<text x="${W_ - P}" y="${xy[xy.length - 1][1] - 8}" text-anchor="end" style="fill:${color}">${v[v.length - 1]}</text>`;
+  };
+  $('#trend').innerHTML = `<svg viewBox="0 0 ${W_} ${H}" width="100%">${line('weight', 'var(--acc)')}${line('waist', 'var(--ok)')}<text x="${P}" y="${H - 6}">${pts[0].date}</text><text x="${W_ - P}" y="${H - 6}" text-anchor="end">${pts[pts.length - 1].date}</text></svg><div class="mut"><span style="color:var(--acc)">●</span> váha (kg) &nbsp; <span style="color:var(--ok)">●</span> pas (cm)</div>`;
+}
+async function renderCompare() {
+  const withPh = S.checkins.filter(c => Object.keys(c.photos || {}).length);
+  if (withPh.length < 2) { $('#cmpCard').style.display = 'none'; return; }
+  $('#cmpCard').style.display = 'block';
+  const opts = withPh.map(c => `<option value="${c.id}">${c.date}</option>`).join('');
+  const a = $('#cmpA').value, b = $('#cmpB').value;
+  $('#cmpA').innerHTML = opts; $('#cmpB').innerHTML = opts;
+  $('#cmpA').value = a || withPh[withPh.length - 1].id; $('#cmpB').value = b || withPh[0].id;
+  drawCompare();
+}
+async function drawCompare() {
+  const ang = $('#cmpAngle').value;
+  const A = S.checkins.find(c => c.id == $('#cmpA').value), B = S.checkins.find(c => c.id == $('#cmpB').value);
+  const [ua, ub] = await Promise.all([photoURL(A?.photos?.[ang]), photoURL(B?.photos?.[ang])]);
+  $('#cmpImgs').innerHTML = `<div>${ua ? `<img src="${ua}">` : '<p class="mut">bez fotky</p>'}<div class="mut">${A?.date} · ${A?.weight ?? '–'} kg</div></div><div>${ub ? `<img src="${ub}">` : '<p class="mut">bez fotky</p>'}<div class="mut">${B?.date} · ${B?.weight ?? '–'} kg</div></div>`;
+}
+['#cmpA', '#cmpB', '#cmpAngle'].forEach(s => $(s).onchange = drawCompare);
+function renderCheck() {
+  if (!$('#cDate').value) $('#cDate').value = today();
+  renderTrend(); renderCompare();
+  $('#cHist').innerHTML = S.checkins.map(c => `<div class="card"><div class="row"><b style="flex:1">${c.date.split('-').reverse().join('.')}</b><span class="mut" style="flex:0 0 auto">${c.weight ?? '–'} kg · pas ${c.waist ?? '–'} cm</span><button class="ghost" style="flex:0 0 auto" data-dc="${c.id}">smazat</button></div>
+    ${Object.keys(c.photos || {}).length ? `<div class="thumbs">${['front', 'side', 'back'].map(a => c.photos[a] ? `<img data-k="${esc(c.photos[a])}" alt="${a}">` : '<div></div>').join('')}</div>` : ''}
+    ${c.note ? `<div class="mut">${esc(c.note)}</div>` : ''}
+    ${c.analysis ? `<details><summary class="mut" style="cursor:pointer;margin-top:6px">Analýza trenéra</summary><div class="analysis">${fmt(c.analysis)}</div></details>` : ''}</div>`).join('');
+  $$('#cHist img[data-k]').forEach(async im => { try { im.src = await photoURL(im.dataset.k); } catch (e) {} });
+  $$('[data-dc]').forEach(b => b.onclick = async () => { if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'opravdu?'; return; } await api('/checkin/' + b.dataset.dc, { method: 'DELETE' }); await load(); });
+}
+
+/* ---------- profile ---------- */
+const PF = [['cil', 'Cíl'], ['vek', 'Věk'], ['vyska', 'Výška (cm)'], ['zkusenosti', 'Zkušenosti s posilovnou'], ['dni_tydne', 'Tréninků týdně'], ['delka_treninku', 'Délka tréninku'], ['zraneni', 'Zranění / omezení'], ['plavani', 'Plavání (objem, dny)'], ['poznamky', 'Další poznámky']];
+function renderProfile() {
+  const p = S.profile || {};
+  const extra = Object.keys(p).filter(k => !PF.some(f => f[0] === k));
+  $('#profFields').innerHTML = [...PF, ...extra.map(k => [k, k])].map(([k, l]) => `<label>${esc(l)}</label><input data-pk="${esc(k)}" value="${esc(typeof p[k] === 'object' ? JSON.stringify(p[k]) : p[k] ?? '')}">`).join('');
+}
+$('#pSave').onclick = async () => {
+  const p = {}; $$('[data-pk]').forEach(i => { if (i.value.trim()) p[i.dataset.pk] = i.value.trim(); });
+  await api('/profile', { method: 'PUT', body: p }); S.profile = p; toast('✅ Profil uložen');
+};
+
+/* ---------- boot ---------- */
+go('chat');
+if (PW) load().catch(e => { if (e.message !== 'unauthorized') showLogin('Chyba spojení: ' + e.message); }); else showLogin();
+</script>
+</body>
+</html>
