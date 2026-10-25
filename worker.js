@@ -339,13 +339,13 @@ async function weeklySummary(env, push = true) {
   const all = (await env.DB.prepare('SELECT date,day_name,data,note FROM workouts ORDER BY date ASC').all()).results.map(w => ({ ...w, data: JSON.parse(w.data || '[]') }));
   const week = all.filter(w => w.date >= fromS), before = all.filter(w => w.date < fromS);
   const bestBefore = {};
-  for (const w of before) for (const e of w.data) for (const s of e.sets) bestBefore[e.name] = Math.max(bestBefore[e.name] || 0, e1rm(s.kg, s.reps));
+  for (const w of before) for (const e of w.data) for (const s of e.sets) if (s.reps) bestBefore[e.name] = Math.max(bestBefore[e.name] || 0, e1rm(s.kg, s.reps));
   const prs = [], perEx = {};
   let vol = 0, sets = 0;
   for (const w of week) for (const e of w.data) for (const s of e.sets) {
     vol += (+s.kg || 0) * (+s.reps || 0); sets++;
     const v = e1rm(s.kg, s.reps);
-    if (bestBefore[e.name] && v > bestBefore[e.name] + .01 && (!perEx[e.name] || v > perEx[e.name].v)) perEx[e.name] = { v, kg: s.kg, reps: s.reps };
+    if (s.reps && bestBefore[e.name] && v > bestBefore[e.name] + .01 && (!perEx[e.name] || v > perEx[e.name].v)) perEx[e.name] = { v, kg: s.kg, reps: s.reps };
   }
   for (const [name, x] of Object.entries(perEx)) prs.push(`${name} ${x.kg}×${x.reps} (e1RM ${x.v.toFixed(1)} kg)`);
   const ck = (await env.DB.prepare('SELECT date,weight,waist FROM checkins WHERE weight IS NOT NULL ORDER BY date DESC LIMIT 2').all()).results;

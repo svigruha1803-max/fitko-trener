@@ -126,9 +126,18 @@ th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;lett
 /* checkin */
 .ph{aspect-ratio:3/4;background:var(--card2);border:1.5px dashed var(--line);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--mut);font-size:12px;cursor:pointer;overflow:hidden;position:relative;transition:border-color .2s}
 .ph:hover{border-color:var(--acc)}
-.ph:before{content:"📷";font-size:22px;margin-bottom:4px}
-.ph img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.ph img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;z-index:0}
 .ph input{display:none}
+.ph .phl{position:relative;z-index:1;margin-bottom:34px}
+.ph.has .phl{display:none}
+.ph .phb{position:absolute;left:6px;right:6px;bottom:6px;display:flex;gap:6px;z-index:2}
+.ph .pbtn{flex:1;display:flex;align-items:center;justify-content:center;margin:0;height:34px;border-radius:10px;background:rgba(12,14,19,.75);border:1px solid var(--line);font-size:17px;cursor:pointer;color:var(--tx)}
+.ph .pbtn:hover{border-color:var(--acc)}
+.ph .phx{display:none;position:absolute;top:6px;right:6px;z-index:2;width:28px;height:28px;padding:0;border-radius:50%;background:rgba(12,14,19,.8);border:1px solid var(--line);box-shadow:none;font-size:13px}
+.ph.has .phx{display:block}
+.pmulti{display:flex;align-items:center;justify-content:center;gap:6px;margin:8px 0 2px;padding:9px;border:1px dashed var(--line);border-radius:12px;color:var(--tx);font-size:13px;cursor:pointer}
+.pmulti:hover{border-color:var(--acc)}
+.pmulti input{display:none}
 .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
 .thumbs img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;background:var(--card2)}
 .cmp{display:grid;grid-template-columns:1fr 1fr;gap:6px}
@@ -290,10 +299,12 @@ body.going #timer{bottom:calc(16px + env(safe-area-inset-bottom))}
       <h2>Nový check-in</h2>
       <p class="mut">Pokaždé stejné podmínky: ráno nalačno, stejné světlo, stejná vzdálenost a póza.</p>
       <div class="grid3" style="margin-top:10px">
-        <label class="ph" data-a="front"><input type="file" accept="image/*" capture="environment">Zepředu</label>
-        <label class="ph" data-a="side"><input type="file" accept="image/*" capture="environment">Z boku</label>
-        <label class="ph" data-a="back"><input type="file" accept="image/*" capture="environment">Zezadu</label>
+        <div class="ph" data-a="front"><span class="phl">Zepředu</span><div class="phb"><label class="pbtn" title="Vyfotit">📷<input type="file" accept="image/*" capture="environment"></label><label class="pbtn" title="Z galerie">🖼️<input type="file" accept="image/*"></label></div><button type="button" class="phx">✕</button></div>
+        <div class="ph" data-a="side"><span class="phl">Z boku</span><div class="phb"><label class="pbtn" title="Vyfotit">📷<input type="file" accept="image/*" capture="environment"></label><label class="pbtn" title="Z galerie">🖼️<input type="file" accept="image/*"></label></div><button type="button" class="phx">✕</button></div>
+        <div class="ph" data-a="back"><span class="phl">Zezadu</span><div class="phb"><label class="pbtn" title="Vyfotit">📷<input type="file" accept="image/*" capture="environment"></label><label class="pbtn" title="Z galerie">🖼️<input type="file" accept="image/*"></label></div><button type="button" class="phx">✕</button></div>
       </div>
+      <label class="pmulti">🖼️ Vybrat více fotek z galerie najednou<input type="file" accept="image/*" multiple id="phMulti"></label>
+      <p class="mut" style="font-size:12px">Fotky i čísla jsou nepovinné – ulož klidně jen váhu, jen fotky nebo jen poznámku.</p>
       <div class="grid3">
         <div><label>Datum</label><input type="date" id="cDate"></div>
         <div><label>Váha (kg)</label><input type="number" step="0.1" inputmode="decimal" id="cWeight"></div>
@@ -665,6 +676,7 @@ function bindSwap(root) {
   root.querySelectorAll('[data-swgo]').forEach(b => b.onclick = () => findSwap(+b.dataset.swgo));
   root.querySelectorAll('[data-swpick]').forEach(b => b.onclick = () => { const [i, k, perm] = b.dataset.swpick.split(','); applySwap(+i, +k, perm === '1'); });
 }
+function fmtSets(sets) { const v = (sets || []).filter(s => s.reps || +s.kg).map(s => s.reps ? `${+s.kg || 0}×${s.reps}` : `${s.kg} kg`); return v.length ? v.join(', ') : 'odcvičeno, bez zápisu'; }
 function lastDay(dayName) { return S.workouts.find(w => w.day_name === dayName); }
 function lastSets(name) {
   for (const w of S.workouts) { const e = (w.data || []).find(x => x.name.toLowerCase() === name.toLowerCase()); if (e) return e.sets.filter(s => s.reps); }
@@ -682,7 +694,7 @@ function renderLast() {
   const idx = $('#wDay').value;
   const d = S.plan?.days?.[idx];
   const lw = d ? lastDay(d.name) : S.workouts[0];
-  $('#wLast').innerHTML = lw ? `<div class="last"><b>Naposled${d ? ' tento den' : ''}: ${lw.date.split('-').reverse().join('.')}${d ? '' : ' · ' + esc(lw.day_name)}</b>${(lw.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${e.sets.filter(s => s.reps).map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</span></div>`).join('')}${lw.note ? `<div class="mut">${esc(lw.note)}</div>` : ''}</div>` : '';
+  $('#wLast').innerHTML = lw ? `<div class="last"><b>Naposled${d ? ' tento den' : ''}: ${lw.date.split('-').reverse().join('.')}${d ? '' : ' · ' + esc(lw.day_name)}</b>${(lw.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${fmtSets(e.sets)}</span></div>`).join('')}${lw.note ? `<div class="mut">${esc(lw.note)}</div>` : ''}</div>` : '';
 }
 function renderEx() {
   $('#wEx').innerHTML = W.map((e, i) => {
@@ -708,7 +720,7 @@ function renderLog() {
   $('#wDay').innerHTML = `<option value="">— vlastní —</option>` + days.map((d, i) => `<option value="${i}">${esc(d.name)}</option>`).join('');
   if (cur !== '' && days[cur]) $('#wDay').value = cur;
   if (!W.length) loadDay(); else { renderLast(); renderEx(); }
-  $('#wHist').innerHTML = S.workouts.map(w => `<div class="hist"><div class="row"><b style="flex:1">${w.date.split('-').reverse().join('.')} ${esc(w.day_name)}${w.pending ? ' <span class="pr-badge" style="background:#ffd38a">čeká na nahrání</span>' : ''}</b><button class="ghost" data-dw="${w.id}">smazat</button></div>${(w.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${e.sets.filter(s => s.reps).map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</span></div>`).join('')}${w.note ? `<div class="mut">${esc(w.note)}</div>` : ''}</div>`).join('') || '<p class="mut">Zatím nic.</p>';
+  $('#wHist').innerHTML = S.workouts.map(w => `<div class="hist"><div class="row"><b style="flex:1">${w.date.split('-').reverse().join('.')} ${esc(w.day_name)}${w.pending ? ' <span class="pr-badge" style="background:#ffd38a">čeká na nahrání</span>' : ''}</b><button class="ghost" data-dw="${w.id}">smazat</button></div>${(w.data || []).map(e => `<div>${esc(e.name)}: <span class="mut">${fmtSets(e.sets)}</span></div>`).join('')}${w.note ? `<div class="mut">${esc(w.note)}</div>` : ''}</div>`).join('') || '<p class="mut">Zatím nic.</p>';
   $$('[data-dw]').forEach(b => b.onclick = async () => { if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = 'opravdu?'; return; } if (String(b.dataset.dw).startsWith('q')) setQ(getQ().filter(x => x.tmp !== b.dataset.dw)); else await api('/workout/' + b.dataset.dw, { method: 'DELETE' }); S.workouts = S.workouts.filter(w => w.id != b.dataset.dw); renderLog(); });
   renderProgress();
 }
@@ -716,8 +728,8 @@ $('#wDay').onchange = loadDay;
 $('#wAddEx').onclick = () => { const n = $('#wNewEx').value.trim(); if (!n) return; W.push({ name: n, sets: [{ kg: '', reps: '' }, { kg: '', reps: '' }, { kg: '', reps: '' }] }); $('#wNewEx').value = ''; renderEx(); };
 $('#wSave').onclick = () => saveWorkout();
 async function saveWorkout() {
-  const ex = W.map(e => ({ name: e.name, sets: e.sets.filter(s => s.reps !== '').map(s => ({ kg: s.kg === '' ? 0 : +s.kg, reps: +s.reps })) })).filter(e => e.sets.length);
-  if (!ex.length) return toast('Vyplň aspoň jednu sérii', 2600, 'think');
+  const ex = W.map(e => ({ name: e.name, sets: e.sets.filter(s => s.done || s.kg !== '' || s.reps !== '').map(s => ({ kg: s.kg === '' ? 0 : +s.kg, reps: s.reps === '' ? null : +s.reps })) }));
+  if (!ex.length && !$('#wNote').value.trim()) return toast('Není co uložit – přidej cvik nebo poznámku.', 3000, 'think');
   const idx = $('#wDay').value;
   const body = { date: $('#wDate').value, day_name: idx !== '' ? S.plan.days[idx].name : 'Vlastní', exercises: ex, note: $('#wNote').value };
   $('#wSave').disabled = true;
@@ -792,7 +804,7 @@ function suggest(e) {
 function bestBefore(name) {
   let best = { e: 0, kg: 0 };
   for (const w of S.workouts) for (const ex of (w.data || [])) if (ex.name.toLowerCase() === name.toLowerCase())
-    for (const st of ex.sets) { best.e = Math.max(best.e, e1rm(st.kg, st.reps)); best.kg = Math.max(best.kg, +st.kg || 0); }
+    for (const st of ex.sets) { if (!st.reps) continue; best.e = Math.max(best.e, e1rm(st.kg, st.reps)); best.kg = Math.max(best.kg, +st.kg || 0); }
   return best;
 }
 function findPRs(ex) {
@@ -801,7 +813,7 @@ function findPRs(ex) {
     const had = S.workouts.some(w => (w.data || []).some(x => x.name.toLowerCase() === e.name.toLowerCase()));
     if (!had) continue;
     const b = bestBefore(e.name);
-    const top = e.sets.reduce((a, s) => e1rm(s.kg, s.reps) > e1rm(a.kg, a.reps) ? s : a, { kg: 0, reps: 0 });
+    const top = e.sets.filter(s => s.reps).reduce((a, s) => e1rm(s.kg, s.reps) > e1rm(a.kg, a.reps) ? s : a, { kg: 0, reps: 0 });
     if (e1rm(top.kg, top.reps) > b.e + 0.01 && top.kg > 0) out.push({ name: e.name, kg: top.kg, reps: top.reps });
   }
   return out;
@@ -827,7 +839,7 @@ function renderProgress() {
 }
 function drawProgress() {
   const name = $('#prEx').value;
-  const pts = S.workouts.slice().reverse().map(w => { const e = (w.data || []).find(x => x.name === name); if (!e || !e.sets.length) return null;
+  const pts = S.workouts.slice().reverse().map(w => { const e0 = (w.data || []).find(x => x.name === name); const e = e0 && { ...e0, sets: e0.sets.filter(s => s.reps) }; if (!e || !e.sets.length) return null;
     const best = e.sets.reduce((a, s) => e1rm(s.kg, s.reps) > e1rm(a.kg, a.reps) ? s : a);
     return { date: w.date, e: e1rm(best.kg, best.reps), kg: Math.max(...e.sets.map(s => +s.kg || 0)), best, vol: e.sets.reduce((a, s) => a + (+s.kg || 0) * (+s.reps || 0), 0) }; }).filter(Boolean);
   if (!pts.length) { $('#prChart').innerHTML = ''; $('#prStats').innerHTML = ''; return; }
@@ -850,7 +862,7 @@ $('#prEx').onchange = drawProgress;
 
 /* ---------- go mode ---------- */
 const G = { open: false, i: 0, lock: null };
-const doneSets = e => e.sets.filter(s => s.reps !== '').length;
+const doneSets = e => e.sets.filter(s => s.done || s.reps !== '').length;
 $('#goStart').onclick = () => {
   if (!W.length) return toast('Vyber den plánu nebo přidej cviky', 2600, 'think');
   G.open = true; G.i = Math.max(0, W.findIndex(e => doneSets(e) < e.sets.length)); if (G.i < 0) G.i = 0;
@@ -873,13 +885,13 @@ function renderGo() {
     return;
   }
   const e = W[G.i], j = Math.min(doneSets(e), e.sets.length - 1), sg = suggest(e), prev = lastSets(e.name);
-  const lastToday = e.sets.filter(s => s.reps !== '').slice(-1)[0];
+  const lastToday = e.sets.filter(s => s.done || s.reps !== '').slice(-1)[0];
   $('#goStep').textContent = `Cvik ${G.i + 1}/${W.length}`;
   $('#goBody').innerHTML = `<div class="gm">${mascot(MOOD === 'happy' ? 'happy' : 'idle', { cls: 'bounce' })}</div>
     <div class="mut">Série ${doneSets(e) + 1 > e.sets.length ? e.sets.length : doneSets(e) + 1} z ${e.sets.length}${e.rest ? ' · pauza ' + esc(e.rest) : ''}</div>
     <h2>${esc(e.name)}</h2><div class="mut">Plán: ${esc(e.target || '')}${e.swappedFrom ? ' · místo ' + esc(e.swappedFrom) : ''}</div>
     <div class="sug">${sg.html}${prev.length ? `<div class="mut" style="margin-top:4px">Minule: ${prev.map(s => `${s.kg || 0}×${s.reps}`).join(', ')}</div>` : ''}</div>
-    <div class="chips">${e.sets.map((s, k) => `<span class="chip ${s.reps !== '' ? 'ok' : k === doneSets(e) ? 'cur' : ''}">${s.reps !== '' ? `✓ ${s.kg || 0}×${s.reps}` : `${k + 1}. série`}</span>`).join('')}</div>
+    <div class="chips">${e.sets.map((s, k) => `<span class="chip ${(s.done || s.reps !== '') ? 'ok' : k === doneSets(e) ? 'cur' : ''}">${(s.done || s.reps !== '') ? `✓ ${s.reps !== '' ? (s.kg || 0) + '×' + s.reps : (s.kg ? s.kg + ' kg' : 'hotovo')}` : `${k + 1}. série`}</span>`).join('')}</div>
     <div class="inp"><div><label>kg</label><input id="goKg" inputmode="decimal" value="${esc(lastToday ? lastToday.kg : (sg.kg ?? ''))}"></div><div><label>opakování</label><input id="goReps" inputmode="numeric" value="${esc(sg.reps ?? '')}"></div></div>
     <button class="big" id="goDone">✓ Série hotová</button>
     <div class="go-row"><button class="sec" id="goPrev" title="Předchozí cvik">←</button><button class="sec" id="goSwap">🔄 Jiný</button><button class="sec" id="goAdd">+ série</button><button class="sec" id="goNext" title="Další cvik">→</button></div>
@@ -887,9 +899,8 @@ function renderGo() {
   bindSwap($('#goSwapBox'));
   $('#goDone').onclick = () => {
     const kg = $('#goKg').value.replace(',', '.'), reps = $('#goReps').value;
-    if (reps === '') return toast('Zadej počet opakování', 2200, 'think');
     const k = doneSets(e); if (k >= e.sets.length) e.sets.push({ kg: '', reps: '' });
-    e.sets[k] = { kg, reps };
+    e.sets[k] = { kg, reps, done: true };
     const finishedEx = doneSets(e) >= e.sets.length, last = finishedEx && G.i === W.length - 1;
     if (finishedEx) G.i++;
     if (!last) startRest(parseRest(e.rest), finishedEx && W[G.i] ? 'další: ' + W[G.i].name : e.name);
@@ -1021,17 +1032,26 @@ async function resize(file, max = 1280) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
 }
-$$('.ph').forEach(ph => {
-  const inp = ph.querySelector('input');
-  inp.onchange = async () => {
-    const f = inp.files[0]; if (!f) return;
+async function setPhoto(ph, f) {
+  try {
     const b = await resize(f); photoFiles[ph.dataset.a] = b;
-    let im = ph.querySelector('img'); if (!im) { im = document.createElement('img'); ph.appendChild(im); }
-    im.src = URL.createObjectURL(b);
-  };
+    let im = ph.querySelector('img'); if (!im) { im = document.createElement('img'); ph.prepend(im); }
+    im.src = URL.createObjectURL(b); ph.classList.add('has');
+  } catch (e) { toast('Tuhle fotku neumím načíst – zkus jiný formát (JPG/PNG).', 3500, 'think'); }
+}
+function clearPhoto(ph) { delete photoFiles[ph.dataset.a]; ph.querySelector('img')?.remove(); ph.classList.remove('has'); ph.querySelectorAll('input').forEach(i => i.value = ''); }
+$$('.ph').forEach(ph => {
+  ph.querySelectorAll('input').forEach(inp => inp.onchange = () => { const f = inp.files[0]; if (f) setPhoto(ph, f); inp.value = ''; });
+  ph.querySelector('.phx').onclick = e => { e.preventDefault(); clearPhoto(ph); };
 });
+$('#phMulti').onchange = async () => {
+  const files = [...$('#phMulti').files]; $('#phMulti').value = '';
+  const slots = $$('.ph'); const order = [...slots.filter(p => !photoFiles[p.dataset.a]), ...slots.filter(p => photoFiles[p.dataset.a])];
+  for (let i = 0; i < Math.min(files.length, 3); i++) await setPhoto(order[i], files[i]);
+  if (files.length > 3) toast('Použil jsem první 3 fotky (zepředu, z boku, zezadu).', 3000, 'think');
+};
 $('#cSave').onclick = async () => {
-  if (!Object.keys(photoFiles).length && !$('#cWeight').value) return toast('Přidej fotky nebo váhu', 2600, 'think');
+  if (!Object.keys(photoFiles).length && !$('#cWeight').value && !$('#cWaist').value && !$('#cNote').value.trim()) return toast('Není co uložit – přidej aspoň fotku, váhu nebo poznámku.', 3000, 'think');
   const fd = new FormData();
   fd.append('date', $('#cDate').value || today());
   fd.append('weight', $('#cWeight').value.replace(',', '.'));
@@ -1043,7 +1063,7 @@ $('#cSave').onclick = async () => {
     const r = await api('/checkin', { method: 'POST', body: fd });
     if (r.error) toast('Uloženo, analýza selhala: ' + r.error, 5000, 'think'); else { toast('Check-in uložen, analýza je v chatu'); setMood('happy', 4000); }
     for (const k of Object.keys(photoFiles)) delete photoFiles[k];
-    $$('.ph img').forEach(i => i.remove()); $$('.ph input').forEach(i => i.value = '');
+    $$('.ph').forEach(clearPhoto);
     ['#cWeight', '#cWaist', '#cNote'].forEach(s => $(s).value = '');
     await load();
     if (r.analysis) go('chat');
